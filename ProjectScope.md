@@ -38,15 +38,18 @@ Ekran `3 Sütunlu Grid` yapısı üzerine kuruludur:
 
 ### 3. Orta Panel: Ana Konsol (%50)
 * **Üst Bölge (%30):** Boss diyalogları ve sistem logları. Typewriter efekti kullanılır.
-* **Alt Bölge (%70):** **Fight Box**. Undertale tarzı siyah kutu. Deflect mekaniğinin kalbi.
+* **Alt Bölge (%70):** **Terminal Combat (Fight Box)**. Hacker temalı terminal arayüzü.
 
 ---
 
-## 🕹 Oynanış Mekaniklerini: Aether Deflect
-* **Player Bar:** X ekseninde hareket eden yansıtıcı yüzey.
-* **Projectiles:** Üstten yağan büyüsel mermiler (🔮).
-* **Deflect Logic:** Merminin bara çarptığı noktaya göre yansıma açısının değişmesi (Vector Reflection).
-* **Locks (Güvenlik Kilitleri):** Fight Box içindeki 🔒 simgeleri. Yansıyan mermilerle bu kilitler kırılmalıdır.
+## 🕹 Oynanış Mekaniklerini: Terminal Combat
+* **Terminal Ekranı:** Siyah, hacker tarzı bir konsol.
+* **Güvenlik Düğümleri (Kelimeler/Komutlar):** Yukarıdan aşağı düşen sistem komutları (örn. `OVERRIDE_GATE`, `KILL_PROCESS`).
+* **Typing Mekaniği:** Oyuncu klavye ile kelimeleri hatasız yazarak onları yok eder.
+* **Boss Evreleri:** 
+  1. **Kapı Gardiyanı (Firewall):** Basit komutlar, zamanla hızlanır.
+  2. **Ana Kaledeki Şövalye (Antivirus):** Tuzak kelimeler (kırmızı/yeşil) ve şifreli metinler (`*#@!X`).
+  3. **Yüce Büyücü (Core AI):** Kaotik ekran, tersten yazılar, UI bozulmaları (Glitch).
 
 ---
 
@@ -56,9 +59,9 @@ Ekran `3 Sütunlu Grid` yapısı üzerine kuruludur:
 src/
 ├── components/
 │   ├── layout/          # LeftPanel, RightPanel, MainConsole
-│   ├── game/            # FightBox, Projectile, PlayerBar, Lock
+│   ├── game/            # FightBox, WordNode
 │   └── ui/              # TerminalText, StatCard, ProgressBar
 ├── store/               # useGameStore.ts (Zustand: Şehir ve Kardeş state'leri)
-├── hooks/               # useDeflect.ts, useBossAI.ts
+├── hooks/               # useTyping.ts, useBossAI.ts
 ├── constants/           # bossData.ts (Diyaloglar ve mermi paternleri)
 └── types/               # game.d.ts (GameStates, BossTypes)
