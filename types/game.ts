@@ -19,7 +19,9 @@ export interface ProjectileData {
 
 export type Language = 'en' | 'tr';
 
-export type GameStateStatus = 'MENU' | 'INTRO' | 'IDLE' | 'FIGHTING' | 'DIALOGUE' | 'GAME_OVER';
+export type GameStateStatus = 'MENU' | 'INTRO' | 'IDLE' | 'FIGHTING' | 'DIALOGUE' | 'STORY' | 'GAME_OVER' | 'ENDING';
+
+export type BossType = 'FIREWALL' | 'ANTIVIRUS' | 'CORE_AI' | 'FINAL_BOSS';
 
 export interface GameState {
   // State Verileri
@@ -27,6 +29,7 @@ export interface GameState {
   language: Language;
   city: CityData;
   sibling: SiblingData;
+  currentBoss: BossType;
 
   // State Eylemleri (Actions)
   setGameStatus: (status: GameStateStatus) => void;
@@ -35,5 +38,6 @@ export interface GameState {
   healSibling: (stabilityIncrease: number, stressDecrease: number) => void;
   updateSiblingHeartRate: (bpm: number) => void;
   updateGridStatus: (status: number) => void;
+  setCurrentBoss: (boss: BossType) => void;
   resetGame: () => void;
 }

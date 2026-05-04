@@ -18,6 +18,7 @@ export const useGameStore = create<GameState>()((set) => ({
   language: 'tr',
   city: initialCityState,
   sibling: initialSiblingState,
+  currentBoss: 'FIREWALL',
 
   setGameStatus: (status) => set({ status }),
 
@@ -47,9 +48,12 @@ export const useGameStore = create<GameState>()((set) => ({
     city: { ...state.city, gridStatus }
   })),
 
+  setCurrentBoss: (boss) => set({ currentBoss: boss }),
+
   resetGame: () => set({
     status: 'MENU',
     city: initialCityState,
     sibling: initialSiblingState,
+    currentBoss: 'FIREWALL'
   }),
 }));
