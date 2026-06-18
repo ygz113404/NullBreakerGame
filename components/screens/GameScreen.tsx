@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useGameStore } from '../../store/useGameStore';
 import { GameState } from '../../types/game';
 import { FightBox } from './FightBox';
-import { DIALOGUES, DialogueLine } from '../../game/constants/dialogues';
+import { getDialogues, DialogueLine } from '../../game/constants/dialogues';
 import { motion } from 'framer-motion';
 
 // --- ARA BÖLÜM BİLEŞENLERİ ---
@@ -14,6 +14,8 @@ function StoryInterlude({ dialogues, onComplete, isMinigame = false }: { dialogu
   const [displayedText, setDisplayedText] = useState("");
   const [isDecrypted, setIsDecrypted] = useState(!isMinigame);
   const [decryptWord, setDecryptWord] = useState("");
+  const language = useGameStore((state: GameState) => state.language);
+  
   const [playerTyped, setPlayerTyped] = useState("");
 
   useEffect(() => {
@@ -26,8 +28,13 @@ function StoryInterlude({ dialogues, onComplete, isMinigame = false }: { dialogu
   useEffect(() => {
     if (!isMinigame || isDecrypted || index >= dialogues.length) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key.length === 1 && /[a-zA-Z0-9_]/.test(e.key)) {
-        setPlayerTyped(prev => (decryptWord.startsWith(prev + e.key.toUpperCase()) ? prev + e.key.toUpperCase() : prev));
+      if (e.key.length === 1 && /[a-zA-Z0-9_ıiIİ]/.test(e.key)) {
+        let char = e.key.toUpperCase();
+        if (e.key === 'ı' || e.key === 'i' || char === 'İ') {
+          char = 'I';
+        }
+
+        setPlayerTyped(prev => (decryptWord.startsWith(prev + char) ? prev + char : prev));
       } else if (e.key === "Backspace") {
         setPlayerTyped(prev => prev.slice(0, -1));
       }
@@ -80,7 +87,7 @@ function StoryInterlude({ dialogues, onComplete, isMinigame = false }: { dialogu
         </p>
         {isMinigame && !isDecrypted && (
           <div className="mt-8 border border-red-900 bg-red-950/30 p-4 rounded-md">
-            <p className="text-red-400 text-sm mb-2 uppercase">Kritik Veri Şifrelendi. Şifreyi Çözmek İçin Terminale Girin:</p>
+            <p className="text-red-400 text-sm mb-2 uppercase">{language === 'tr' ? 'Kritik Veri Şifrelendi. Şifreyi Çözmek İçin Terminale Girin:' : 'Critical Data Encrypted. Enter the Terminal to Decrypt:'}</p>
             <div className="flex flex-col items-center">
               <div className="text-gray-600 font-bold relative z-10 flex justify-center w-full items-center text-xl tracking-widest gap-1 mb-2">
                 {decryptWord.split('').map((char, idx) => (<span key={idx} className={idx < playerTyped.length ? 'opacity-0' : 'opacity-100'}>{char}</span>))}
@@ -93,64 +100,173 @@ function StoryInterlude({ dialogues, onComplete, isMinigame = false }: { dialogu
         )}
       </div>
       <button onClick={handleNext} disabled={isMinigame && !isDecrypted} className={`mt-16 px-8 py-3 border font-mono tracking-widest transition-colors ${isMinigame && !isDecrypted ? 'border-gray-800 text-gray-700 cursor-not-allowed' : 'border-cyan-500 text-cyan-400 hover:bg-cyan-900 animate-pulse'}`}>
-        {index < dialogues.length - 1 ? "> DEVAM" : "> İLERİ"}
+        {index < dialogues.length - 1 ? (language === 'tr' ? "> DEVAM" : "> NEXT") : (language === 'tr' ? "> İLERİ" : "> FORWARD")}
       </button>
     </div>
   );
 }
 
-const initialGrid = [
-  [{ type: 'start', rotation: 0, connections: ['right'] }],
-  [{ type: 'corner', rotation: 0, connections: ['left', 'bottom'] }, { type: 'line', rotation: 90, connections: ['top', 'bottom'] }, { type: 'corner', rotation: 270, connections: ['top', 'left'] }],
-  [{ type: 'line', rotation: 0, connections: ['left', 'right'] }, { type: 'corner', rotation: 90, connections: ['top', 'right'] }, { type: 'line', rotation: 90, connections: ['top', 'bottom'] }, { type: 'corner', rotation: 180, connections: ['bottom', 'left'] }],
-  [{ type: 'corner', rotation: 90, connections: ['top', 'right'] }, { type: 'line', rotation: 0, connections: ['left', 'right'] }, { type: 'corner', rotation: 0, connections: ['left', 'bottom'] }, { type: 'end', rotation: 0, connections: ['top'] }]
+// Mükemmel oturan 3x3'lük SVG tabanlı yeni Grid Sistemi
+const initialPuzzleGrid = [
+  [
+    { id: '0-0', type: 'start', rot: 0, correct: [0] },
+    { id: '0-1', type: 'line', rot: 90, correct: [0, 180] },
+    { id: '0-2', type: 'corner', rot: 90, correct: [180] },
+  ],
+  [
+    { id: '1-0', type: 'line', rot: 0, correct: [0, 90, 180, 270] }, // Tuzak (decoy) boru
+    { id: '1-1', type: 'corner', rot: 0, correct: [90] },
+    { id: '1-2', type: 'corner', rot: 180, correct: [270] },
+  ],
+  [
+    { id: '2-0', type: 'end', rot: 180, correct: [180] }, // HATA DÜZELTİLDİ: rot: 180 ile çıkış ucu sağa bakacak.
+    { id: '2-1', type: 'corner', rot: 90, correct: [270] },
+    { id: '2-2', type: 'corner', rot: 270, correct: [0, 90, 180, 270] }, // Tuzak (decoy) boru
+  ]
 ];
 
-function NodeRotationPuzzle({ onComplete }: { onComplete: () => void }) {
-  const [grid, setGrid] = useState(initialGrid.map(row => row.map(cell => ({ ...cell, rotation: Math.floor(Math.random() * 4) * 90 }))));
-  const [isSolved, setIsSolved] = useState(false);
+const randomizeGrid = () => {
+  let newGrid;
+  let isAlreadySolved = true;
+  // Tablo baştan çözülü gelmesin diye kontrol ediyoruz
+  while (isAlreadySolved) {
+    newGrid = initialPuzzleGrid.map(row =>
+      row.map(cell => {
+        if (cell.type === 'start' || cell.type === 'end') return { ...cell };
+        return { ...cell, rot: Math.floor(Math.random() * 4) * 90 };
+      })
+    );
+    isAlreadySolved = newGrid.every(row => 
+      row.every(cell => cell.correct.includes(cell.rot))
+    );
+  }
+  return newGrid as typeof initialPuzzleGrid;
+};
 
-  const rotateCell = (rowIndex: number, cellIndex: number) => {
+function NodeRotationPuzzle({ onComplete }: { onComplete: () => void }) {
+  const [grid, setGrid] = useState(randomizeGrid());
+  const [isSolved, setIsSolved] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+
+  const rotateCell = (rIndex: number, cIndex: number) => {
     if (isSolved) return;
     const newGrid = [...grid];
-    const cell = newGrid[rowIndex][cellIndex];
+    const row = [...newGrid[rIndex]];
+    const cell = { ...row[cIndex] };
+    
     if (cell.type === 'start' || cell.type === 'end') return;
-    cell.rotation = (cell.rotation + 90) % 360;
+
+    cell.rot = (cell.rot + 90) % 360;
+    row[cIndex] = cell;
+    newGrid[rIndex] = row;
     setGrid(newGrid);
   };
 
   useEffect(() => {
-    // Check for win condition
-    // This is a simplified check. A real implementation would trace the path.
-    const isPathComplete = grid.every(row => row.every(cell => cell.rotation === 0));
-    if(isPathComplete) {
+    const solved = grid.every(row => 
+      row.every(cell => cell.correct.includes(cell.rot))
+    );
+    if (solved && !isSolved) {
       setIsSolved(true);
-      setTimeout(onComplete, 1500);
+      setTimeout(onComplete, 1200);
     }
-  }, [grid, onComplete]);
+  }, [grid, isSolved, onComplete]);
+
+  // Zamanlayıcı Efekti
+  useEffect(() => {
+    if (isSolved) return;
+    
+    if (timeLeft <= 0) {
+      setGrid(randomizeGrid()); // Süre bitince parçaları tekrar karıştır
+      setTimeLeft(30);
+      setFailedAttempts(prev => prev + 1);
+      return;
+    }
+
+    const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft, isSolved]);
+
+  const renderPipe = (type: string, isSolved: boolean) => {
+    const color = isSolved ? "text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.8)]" : "text-cyan-500 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]";
+    
+    if (type === 'start') return (
+      <svg viewBox="0 0 100 100" className={`w-full h-full ${color}`}>
+        <rect x="50" y="40" width="50" height="20" fill="currentColor" />
+        <circle cx="50" cy="50" r="25" fill="#22c55e" />
+      </svg>
+    );
+    if (type === 'end') return (
+      <svg viewBox="0 0 100 100" className={`w-full h-full ${color}`}>
+        <rect x="0" y="40" width="50" height="20" fill="currentColor" />
+        <circle cx="50" cy="50" r="25" fill="#ef4444" />
+      </svg>
+    );
+    if (type === 'line') return (
+      <svg viewBox="0 0 100 100" className={`w-full h-full ${color}`}><rect x="0" y="40" width="100" height="20" fill="currentColor" /></svg>
+    );
+    if (type === 'corner') return (
+      <svg viewBox="0 0 100 100" className={`w-full h-full ${color}`}><path d="M40 0 L60 0 L60 40 L100 40 L100 60 L40 60 Z" fill="currentColor" /></svg>
+    );
+  };
+    const language = useGameStore((state: GameState) => state.language);
+
 
   return (
-    <div className="w-full h-full bg-black border border-yellow-900 shadow-[0_0_20px_rgba(255,165,0,0.1)] rounded p-4 flex flex-col items-center justify-center">
-      <h2 className="text-2xl text-yellow-500 font-bold mb-2">GÜÇ YÖNLENDİRME BULMACASI</h2>
-      <p className="text-gray-400 mb-6">Firewall'a giden yolu açmak için düğümleri döndürerek devreyi tamamla.</p>
-      <div className='p-4 bg-gray-950/50 border border-yellow-800 rounded-md'>
-        {grid.map((row, rowIndex) => (
-          <div key={rowIndex} className="flex">
-            {row.map((cell, cellIndex) => (
-              <div key={cellIndex} onClick={() => rotateCell(rowIndex, cellIndex)} className={`w-16 h-16 border border-gray-800 flex items-center justify-center cursor-pointer hover:bg-yellow-950/50 transition-colors`}>
-                <motion.div animate={{ rotate: cell.rotation }} className="w-full h-full">
-                  {/* Visual representation of nodes - simplified */}
-                  {cell.type === 'start' && <div className="w-full h-full bg-green-500 rounded-full" />}
-                  {cell.type === 'end' && <div className="w-full h-full bg-red-500 rounded-full" />}
-                  {cell.type === 'line' && <div className="w-full h-2 bg-yellow-500 my-7" />}
-                  {cell.type === 'corner' && <div className="w-8 h-8 border-l-8 border-t-8 border-yellow-500" />}
-                </motion.div>
-              </div>
-            ))}
-          </div>
-        ))}
+    <div className="w-full h-full bg-black border border-cyan-900 shadow-[0_0_20px_rgba(34,211,238,0.1)] rounded p-4 flex flex-col items-center justify-center relative">
+      {failedAttempts > 0 && (
+        <p className="text-red-500 text-xs font-mono absolute top-4 right-4 animate-pulse">
+          {language === 'tr' ? `SÜRE BİTTİ. SIFIRLANDI: ${failedAttempts}` : `TIME'S UP. RESET: ${failedAttempts}`}
+        </p>
+      )}
+      <h2 className="text-xl sm:text-2xl text-cyan-400 font-bold mb-2 tracking-widest drop-shadow-[0_0_8px_rgba(34,211,238,0.6)] text-center">{language === 'tr' ? 'SİSTEM AĞI YÖNLENDİRMESİ' : 'SYSTEM NETWORK ROUTING'}</h2>
+      <p className="text-gray-400 mb-4 font-mono text-xs sm:text-sm text-center">{language === 'tr' ? "Firewall'a giden veri akışını sağlamak için düğümleri hizala." : "Align the nodes to ensure data flow to the firewall."}</p>
+      
+      <div className="w-full max-w-[200px] bg-gray-900 h-2 mb-1 rounded-full overflow-hidden">
+        <div 
+          className={`h-full transition-all duration-1000 ${timeLeft < 10 ? 'bg-red-500' : 'bg-cyan-500'}`}
+          style={{ width: `${(timeLeft / 30) * 100}%` }}
+        />
       </div>
-       {isSolved && <p className="mt-4 text-green-500 animate-pulse text-xl">DEVRE TAMAMLANDI. GİRİŞ AÇILIYOR...</p>}
+      <p className={`font-mono mb-6 text-sm ${timeLeft < 10 ? 'text-red-500 animate-pulse font-bold' : 'text-cyan-400'}`}>
+        {language === 'tr' ? `KALAN SÜRE: ${timeLeft}s` : `TIME LEFT: ${timeLeft}s`}
+      </p>
+
+      <div className="p-4 bg-gray-950/80 border border-cyan-900 rounded-lg shadow-[inset_0_0_20px_rgba(34,211,238,0.05)]">
+        <div className="grid grid-rows-3 gap-0 bg-gray-900/50 border border-gray-800 p-2 rounded">
+          {grid.map((row, rIndex) => (
+            <div key={`row-${rIndex}`} className="flex">
+              {row.map((cell, cIndex) => (
+                <div 
+                  key={cell.id} 
+                  onClick={() => rotateCell(rIndex, cIndex)} 
+                  className={`w-16 h-16 sm:w-24 sm:h-24 border border-gray-800/80 flex items-center justify-center cursor-pointer hover:bg-cyan-950/30 transition-colors
+                    ${cell.type !== 'start' && cell.type !== 'end' ? 'active:scale-95' : ''}`}
+                >
+                  <motion.div 
+                    animate={{ rotate: cell.rot }} 
+                    transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                    className="w-full h-full"
+                  >
+                    {renderPipe(cell.type, isSolved)}
+                  </motion.div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {isSolved && (
+        <motion.p 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-6 text-green-500 font-bold tracking-widest animate-pulse text-lg sm:text-xl drop-shadow-[0_0_8px_rgba(34,197,94,0.8)] text-center"
+        >
+          {language === 'tr' ? '> BAĞLANTI SAĞLANDI. GİRİŞ AÇILIYOR...' : '> CONNECTION ESTABLISHED. ACCESS GRANTED...'}
+        </motion.p>
+      )}
     </div>
   );
 }
@@ -160,6 +276,8 @@ function NodeRotationPuzzle({ onComplete }: { onComplete: () => void }) {
 
 export function GameScreen() {
   const { city, sibling, currentBoss, setCurrentBoss, damageCity, resetGame } = useGameStore();
+  const language = useGameStore((state: GameState) => state.language);
+  const DIALOGUES = useMemo(() => getDialogues(language), [language]);
   const [bossHealth, setBossHealth] = useState(250);
   const [playerHealth, setPlayerHealth] = useState(1000);
   const [phase, setPhase] = useState<"story" | "puzzle" | "combat">("story");
@@ -208,25 +326,25 @@ export function GameScreen() {
       setIsStoryMinigame(false);
       setPhase("story");
     } else if (currentBoss === 'FINAL_BOSS') {
-      alert("OYUN BİTTİ. " + DIALOGUES.endings.A_DARKNESS);
+      alert((language === 'tr' ? "OYUN BİTTİ. " : "GAME OVER. ") + DIALOGUES.endings.A_DARKNESS);
     }
   };
 
   const bossInfo = useMemo(() => {
     switch (currentBoss) {
-      case 'FIREWALL': return { name: "THE FIREWALL", title: "KAPI GARDİYANI", dialogues: DIALOGUES.boss1_firewall.pre_fight };
-      case 'ANTIVIRUS': return { name: "ANTIVIRUS", title: "ŞÖVALYE", dialogues: DIALOGUES.boss2_antivirus.pre_fight };
-      case 'CORE_AI': return { name: "CORE AI", title: "BÜYÜCÜ", dialogues: DIALOGUES.boss3_coreai.pre_fight };
-      case 'FINAL_BOSS': return { name: "KARDEŞ", title: "KUKLACI", dialogues: DIALOGUES.final_boss_sibling.pre_fight };
+      case 'FIREWALL': return { name: "THE FIREWALL", title: language === 'tr' ? "KAPI GARDİYANI" : "GATEKEEPER", dialogues: DIALOGUES.boss1_firewall.pre_fight };
+      case 'ANTIVIRUS': return { name: "ANTIVIRUS", title: language === 'tr' ? "ŞÖVALYE" : "KNIGHT", dialogues: DIALOGUES.boss2_antivirus.pre_fight };
+      case 'CORE_AI': return { name: "CORE AI", title: language === 'tr' ? "BÜYÜCÜ" : "SORCERER", dialogues: DIALOGUES.boss3_coreai.pre_fight };
+      case 'FINAL_BOSS': return { name: "KARDEŞ", title: language === 'tr' ? "KUKLACI" : "PUPPETEER", dialogues: DIALOGUES.final_boss_sibling.pre_fight };
       default: return { name: "BİLİNMEYEN", title: "HATA", dialogues: [] };
     }
-  }, [currentBoss]);
+  }, [currentBoss, language, DIALOGUES]);
 
   const renderMainContent = () => {
     switch (phase) {
       case "story": return <StoryInterlude dialogues={storyDialogues} onComplete={handleStoryComplete} isMinigame={isStoryMinigame} />;
       case "puzzle": return <NodeRotationPuzzle onComplete={handlePuzzleComplete} />;
-      case "combat": return <FightBox key={currentBoss} bossHealth={bossHealth} setBossHealth={setBossHealth} playerHealth={playerHealth} setPlayerHealth={setPlayerHealth} dialogues={bossInfo.dialogues} onBossDefeat={handleBossDefeat} onRestart={resetGame} />;
+      case "combat": return <FightBox currentBoss={currentBoss} key={currentBoss} bossHealth={bossHealth} setBossHealth={setBossHealth} playerHealth={playerHealth} setPlayerHealth={setPlayerHealth} dialogues={bossInfo.dialogues} onBossDefeat={handleBossDefeat} onRestart={resetGame} />;
       default: return null;
     }
   };
@@ -235,18 +353,18 @@ export function GameScreen() {
     <main className="flex h-screen w-full bg-black text-white font-mono overflow-hidden relative">
       <section className="relative isolate w-1/4 h-full border-r border-cyan-800 bg-gray-950 p-4 flex flex-col">
         <div className="absolute bottom-0 left-0 w-full h-[35%] bg-cyan-900 opacity-20 pointer-events-none -z-10" style={{ clipPath: 'polygon(0 100%, 0 60%, 10% 60%, 10% 30%, 25% 30%, 25% 50%, 40% 50%, 40% 10%, 55% 10%, 55% 40%, 70% 40%, 70% 20%, 85% 20%, 85% 50%, 100% 50%, 100% 100%)' }} />
-        <h2 className="text-cyan-400 text-xl font-bold mb-4 tracking-widest">AETHERIA</h2>
+        <h2 className="text-cyan-400 text-xl font-bold mb-4 tracking-widest">{language === 'tr' ? 'AETHERIA' : 'AETHERIA'}</h2>
         <div className="space-y-6 mt-4">
           <div>
-            <p className="text-gray-400 mb-1">ŞEHİR SAĞLIĞI</p>
+            <p className="text-gray-400 mb-1">{language === 'tr' ? 'ŞEHİR SAĞLIĞI' : 'CITY HEALTH'}</p>
             <div className="w-full bg-gray-800 h-4 rounded-sm overflow-hidden"><div className="bg-cyan-500 h-full transition-all duration-500" style={{ width: `${city.cityHealth}%` }}></div></div>
           </div>
           <div>
-            <p className="text-gray-400 mb-1">ŞEBEKE DURUMU</p>
+            <p className="text-gray-400 mb-1">{language === 'tr' ? 'ŞEBEKE DURUMU' : 'NETWORK STATUS'}</p>
             <div className="w-full bg-gray-800 h-4 rounded-sm overflow-hidden"><div className="bg-blue-500 h-full transition-all duration-500" style={{ width: `${city.gridStatus}%` }}></div></div>
           </div>
           <div>
-            <p className="text-gray-400">SİVİL KAYIP</p>
+            <p className="text-gray-400">{language === 'tr' ? 'SİVİL KAYIP' : 'CIVILIAN CASUALTIES'}</p>
             <p className="text-3xl text-red-500 font-bold">{city.civilianCasualtyCount.toLocaleString()}</p>
           </div>
         </div>
@@ -266,8 +384,8 @@ export function GameScreen() {
             </div>
           </div>
           <div className="flex-1 bg-gray-950/50 border border-gray-800 p-2 rounded font-mono text-xs overflow-y-auto">
-            <p className="text-gray-500 mb-2">Bağlantı kuruldu... Hedef sistem: Aetheria_Core</p>
-            <p className="text-cyan-500 mb-2">&gt; Null Breaker sızma işlemi başarılı.</p>
+            <p className="text-gray-500 mb-2">{language === 'tr' ? 'Bağlantı kuruldu... Hedef sistem: Aetheria_Core' : 'Connection established... Target system: Aetheria_Core'}  </p>
+            <p className="text-cyan-500 mb-2">{language === 'tr' ? '> Null Breaker sızma işlemi başarılı.' : '> Null Breaker infiltration successful.'}</p>
             {currentBoss === 'ANTIVIRUS' && DIALOGUES.boss2_antivirus.mid_fight_logs.map((log, i) => (<p key={i} className="text-yellow-500 mb-1">[{log.speaker}]: {log.text}</p>))}
             {currentBoss === 'FINAL_BOSS' && DIALOGUES.final_boss_sibling.mid_fight_hacks.map((hack, i) => (<p key={i} className="text-red-600 mb-1">[{hack.speaker}]: {hack.text}</p>))}
           </div>
@@ -279,7 +397,7 @@ export function GameScreen() {
           <div className="mb-1">
             <div className="flex justify-between items-end mb-1">
               <h2 className="text-green-500 text-xl font-bold tracking-widest drop-shadow-[0_0_8px_rgba(34,197,94,0.6)]">
-                NULL BREAKER <span className="text-xs text-gray-500 font-normal">:: SİSTEM SIZICISI</span>
+                {language === 'tr' ? 'NULL BREAKER' : 'NULL BREAKER'} <span className="text-xs text-gray-500 font-normal">:: {language === 'tr' ? 'SİSTEM SIZICISI' : 'SYSTEM INFILTRATOR'}</span>
               </h2>
               <span className="text-green-500 font-mono text-sm">{playerHealth} / 1000</span>
             </div>
@@ -301,17 +419,30 @@ export function GameScreen() {
         </h2>
         <div className="space-y-6 mt-4">
           <div>
-            <p className="text-gray-400 mb-1">KALP ATIŞI (BPM)</p>
-            <p className={`text-4xl font-bold ${currentBoss === 'FINAL_BOSS' ? 'text-red-600 animate-bounce' : sibling.heartRate > 120 ? 'text-red-500 animate-pulse' : 'text-green-500'}`}>
-              {currentBoss === 'FINAL_BOSS' ? 'ERR_OVERFLOW' : sibling.heartRate}
-            </p>
+            <p className="text-gray-400 mb-1">{language === 'tr' ? 'KALP ATIŞI (BPM)' : 'HEART RATE (BPM)'}</p>
+            <div className="flex items-center gap-3">
+              <motion.svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className={`w-8 h-8 sm:w-10 sm:h-10 ${currentBoss === 'FINAL_BOSS' ? 'text-red-700' : sibling.heartRate > 120 ? 'text-red-500' : 'text-green-500'}`}
+                animate={{ scale: [1, 1.25, 1] }}
+                transition={{ repeat: Infinity, duration: 60 / (currentBoss === 'FINAL_BOSS' ? 220 : sibling.heartRate || 60), ease: "easeInOut" }}
+              >
+                <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
+              </motion.svg>
+              <p className={`text-4xl font-bold ${currentBoss === 'FINAL_BOSS' ? 'text-red-600 animate-bounce' : sibling.heartRate > 120 ? 'text-red-500 animate-pulse' : 'text-green-500'}`}>
+                {currentBoss === 'FINAL_BOSS' ? 'ERR_OVERFLOW' : sibling.heartRate}
+              </p>
+            </div>
           </div>
           <div>
-            <p className="text-gray-400 mb-1">SİNİRSEL STRES</p>
+            <p className="text-gray-400 mb-1">{language === 'tr' ? 'SİNİRSEL STRES' : 'NEURAL STRESS'}</p>
             <div className="w-full bg-gray-800 h-4 rounded-sm overflow-hidden"><div className={`h-full transition-all duration-500 ${currentBoss === 'FINAL_BOSS' ? 'bg-red-700 w-full' : 'bg-red-500'}`} style={{ width: currentBoss === 'FINAL_BOSS' ? '100%' : `${sibling.neuroStress}%` }}></div></div>
           </div>
           <div>
-            <p className="text-gray-400 mb-1">STABİLİTE İNDEKSİ</p>
+            <p className="text-gray-400 mb-1">{language === 'tr' ? 'STABİLİTE İNDEKSİ' : 'STABILITY INDEX'}</p>
+            <p className="text-3xl font-bold mb-1">{currentBoss === 'FINAL_BOSS' ? 'ERR_OVERFLOW' : sibling.stabilityIndex}</p>
             <div className="w-full bg-gray-800 h-4 rounded-sm overflow-hidden"><div className={`h-full transition-all duration-500 ${currentBoss === 'FINAL_BOSS' ? 'bg-red-700 w-full' : 'bg-green-500'}`} style={{ width: currentBoss === 'FINAL_BOSS' ? '100%' : `${sibling.stabilityIndex}%` }}></div></div>
           </div>
         </div>

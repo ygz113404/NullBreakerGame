@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useGameStore } from '../../store/useGameStore';
 import { GameState } from '../../types/game';
-import { DIALOGUES } from '../../game/constants/dialogues';
+import { getDialogues } from '../../game/constants/dialogues'; // <-- YENİ
 
 export function IntroScreen() {
   const language = useGameStore((state: GameState) => state.language);
@@ -11,6 +11,7 @@ export function IntroScreen() {
   const [dialogueIndex, setDialogueIndex] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
 
+  const DIALOGUES = useMemo(() => getDialogues(language), [language]);
   const introDialogues = DIALOGUES.intro;
 
   useEffect(() => {
@@ -46,7 +47,7 @@ export function IntroScreen() {
         {dialogueIndex < introDialogues.length && (
           <div>
             <p className="text-sm text-gray-500 mb-2">[{introDialogues[dialogueIndex].speaker}]</p>
-            <p className={`text-xl leading-relaxed min-h-[4rem] ${introDialogues[dialogueIndex].speaker.includes('ANI_LOG') ? 'text-yellow-500 italic drop-shadow-[0_0_5px_rgba(234,179,8,0.5)]' : ''} ${introDialogues[dialogueIndex].speaker === 'KARDEŞ' ? 'text-red-400' : ''}`}>
+            <p className={`text-xl leading-relaxed min-h-[4rem] ${introDialogues[dialogueIndex].speaker.includes('ANI_LOG') ? 'text-yellow-500 italic drop-shadow-[0_0_5px_rgba(234,179,8,0.5)]' : ''} ${['KARDEŞ', 'SIBLING'].includes(introDialogues[dialogueIndex].speaker) ? 'text-red-400' : ''}`}>
               {displayedText}
               <span className="animate-pulse bg-gray-300 w-3 h-6 inline-block align-middle ml-2"></span>
             </p>

@@ -7,6 +7,7 @@ import { Projectile } from '../Projectile';
 
 export function FightBox() {
   const status = useGameStore((state: GameState) => state.status);
+  const language = useGameStore((state: GameState) => state.language);
   const setGameStatus = useGameStore((state: GameState) => state.setGameStatus);
   const [projectiles, setProjectiles] = useState<ProjectileData[]>([]);
 
@@ -41,7 +42,7 @@ export function FightBox() {
           className="px-4 py-2 z-10 bg-red-900 hover:bg-red-700 text-white font-bold tracking-widest transition-colors border border-red-500"
           onClick={() => setGameStatus('FIGHTING')}
         >
-          BAĞLANTIYI KOPAR
+          {language === 'en' ? 'DISCONNECT' : 'BAĞLANTIYI KOPAR'}
         </button>
       ) : (
         <>
