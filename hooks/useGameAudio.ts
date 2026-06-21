@@ -12,20 +12,27 @@ export function useGameAudio(bpm: number, heartbeatEnabled: boolean) {
 
   const playTone = useCallback((frequency: number, duration: number, volume: number, type: OscillatorType = 'sine') => {
     const context = getContext();
-    if (context.state !== 'running') return;
+    const emitTone = () => {
+      if (context.state !== 'running') return;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const now = context.currentTime;
 
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const now = context.currentTime;
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, now);
+      gain.gain.setValueAtTime(volume, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + duration);
+    };
 
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(frequency, now);
-    gain.gain.setValueAtTime(volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start(now);
-    oscillator.stop(now + duration);
+    if (context.state === 'suspended') {
+      void context.resume().then(emitTone);
+    } else {
+      emitTone();
+    }
   }, [getContext]);
 
   useEffect(() => {
@@ -66,9 +73,16 @@ export function useGameAudio(bpm: number, heartbeatEnabled: boolean) {
 
   useEffect(() => {
     if (!heartbeatEnabled) return;
-    const ambientPulse = () => playTone(42, 2.6, 0.012, 'triangle');
-    const interval = setInterval(ambientPulse, 4200);
-    ambientPulse();
+
+    const melody = [110, 130.81, 146.83, 164.81, 146.83, 130.81, 98, 130.81];
+    let step = 0;
+    const playMusicStep = () => {
+      playTone(melody[step % melody.length], 0.38, 0.011, 'triangle');
+      if (step % 4 === 0) playTone(melody[step % melody.length] / 2, 0.55, 0.007, 'sine');
+      step += 1;
+    };
+    const interval = setInterval(playMusicStep, 520);
+    playMusicStep();
     return () => clearInterval(interval);
   }, [heartbeatEnabled, playTone]);
 
@@ -79,6 +93,9 @@ export function useGameAudio(bpm: number, heartbeatEnabled: boolean) {
     playTone(880, 0.18, 0.05, 'square');
   }, [playTone]);
   const playDecision = useCallback(() => playTone(180, 0.35, 0.06, 'triangle'), [playTone]);
+  const playKey = useCallback((correct = true) => {
+    playTone(correct ? 310 : 105, 0.035, correct ? 0.025 : 0.035, correct ? 'square' : 'sawtooth');
+  }, [playTone]);
 
-  return { playSuccess, playDamage, playEmp, playDecision };
+  return { playSuccess, playDamage, playEmp, playDecision, playKey };
 }

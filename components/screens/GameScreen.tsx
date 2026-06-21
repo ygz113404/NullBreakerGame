@@ -2,8 +2,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useGameStore } from '../../store/useGameStore';
-import { EndingType, GameState } from '../../types/game';
+import { CharacterFate, EndingType, GameState, WorldCharacter } from '../../types/game';
 import { FightBox } from './FightBox';
+import { RescueMission } from './RescueMission';
 import { getDialogues, DialogueLine } from '../../game/constants/dialogues';
 import { motion } from 'framer-motion';
 
@@ -362,6 +363,7 @@ function EndingScreen() {
   const sibling = useGameStore((state) => state.sibling);
   const runStats = useGameStore((state) => state.runStats);
   const moralDecisions = useGameStore((state) => state.moralDecisions);
+  const characterFates = useGameStore((state) => state.characterFates);
   const resetGame = useGameStore((state) => state.resetGame);
   const DIALOGUES = useMemo(() => getDialogues(language), [language]);
 
@@ -374,6 +376,31 @@ function EndingScreen() {
     ? Math.round((runStats.correctKeystrokes / 5) / (runStats.combatSeconds / 60))
     : 0;
   const locale = language === 'tr' ? 'tr-TR' : 'en-US';
+  const characterOrder: WorldCharacter[] = ['LENA', 'DENIZ', 'NEHIR', 'ARDA', 'MIRA'];
+  const characterNames: Record<WorldCharacter, string> = {
+    LENA: 'DR. LENA',
+    DENIZ: language === 'tr' ? 'DENİZ' : 'DENIZ',
+    NEHIR: language === 'tr' ? 'NEHİR' : 'NEHIR',
+    ARDA: 'ARDA',
+    MIRA: language === 'tr' ? 'MİRA' : 'MIRA',
+  };
+  const fateLabels: Record<CharacterFate, string> = language === 'tr' ? {
+    UNKNOWN: 'SİNYAL YOK',
+    SAFE: 'GÜVENDE',
+    AT_RISK: 'RİSK ALTINDA',
+    LOST: 'KAYIP',
+  } : {
+    UNKNOWN: 'NO SIGNAL',
+    SAFE: 'SAFE',
+    AT_RISK: 'AT RISK',
+    LOST: 'LOST',
+  };
+  const fateStyles: Record<CharacterFate, string> = {
+    UNKNOWN: 'border-gray-800 text-gray-600',
+    SAFE: 'border-green-900 text-green-400',
+    AT_RISK: 'border-yellow-900 text-yellow-400',
+    LOST: 'border-red-900 text-red-500',
+  };
 
   return (
     <motion.div
@@ -392,6 +419,22 @@ function EndingScreen() {
         <div className="border border-purple-900 p-2"><span className="block text-gray-600">{language === 'tr' ? 'STABİLİTE' : 'STABILITY'}</span>{Math.round(sibling.stabilityIndex)}%</div>
         <div className="border border-gray-800 p-2"><span className="block text-gray-600">WPM / ACC</span>{wpm} / {accuracy}%</div>
         <div className="border border-yellow-900 p-2"><span className="block text-gray-600">MAX COMBO</span>x{runStats.maxCombo}</div>
+      </div>
+      <div className="w-full max-w-2xl mt-3">
+        <p className="text-left text-[10px] text-gray-600 tracking-widest mb-1">
+          {language === 'tr' ? 'TELSİZDEKİ İSİMLER' : 'NAMES ON THE RADIO'}
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 text-[9px] sm:text-[10px]">
+          {characterOrder.map((character) => {
+            const fate = characterFates[character];
+            return (
+              <div key={character} className={`border px-2 py-1.5 ${fateStyles[fate]}`}>
+                <span className="block text-gray-400">{characterNames[character]}</span>
+                <span>{fateLabels[fate]}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
       <div className="w-full max-w-2xl mt-3 max-h-24 overflow-y-auto border-t border-gray-800 pt-2 text-left">
         <p className="text-[10px] text-gray-600 tracking-widest mb-1">{language === 'tr' ? 'KARAR KAYDI' : 'DECISION LOG'}</p>
@@ -427,6 +470,7 @@ export function GameScreen() {
     setBossHealth,
     setPlayerHealth,
     completeStory,
+    completeRescueMission,
     completePuzzle,
     defeatCurrentBoss,
     resetGame,
@@ -448,12 +492,18 @@ export function GameScreen() {
     switch (scene) {
       case 'PRE_FIREWALL_STORY':
         return <StoryInterlude dialogues={DIALOGUES.pre_firewall_logs} onComplete={completeStory} />;
+      case 'RESCUE_CLINIC':
+        return <RescueMission mission="CLINIC" onComplete={completeRescueMission} />;
       case 'FIREWALL_PUZZLE':
         return <NodeRotationPuzzle onComplete={completePuzzle} />;
       case 'EXPLORATION_1':
         return <StoryInterlude dialogues={DIALOGUES.exploration_1} onComplete={completeStory} />;
+      case 'RESCUE_EVACUATION':
+        return <RescueMission mission="EVACUATION" onComplete={completeRescueMission} />;
       case 'EXPLORATION_2':
         return <StoryInterlude dialogues={DIALOGUES.exploration_2} onComplete={completeStory} isMinigame />;
+      case 'RESCUE_GRID':
+        return <RescueMission mission="GRID" onComplete={completeRescueMission} />;
       case 'BREAKING_POINT':
         return <StoryInterlude dialogues={DIALOGUES.breaking_point} onComplete={completeStory} />;
       case 'ENDING_CHOICE':

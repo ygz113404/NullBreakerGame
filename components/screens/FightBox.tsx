@@ -56,6 +56,8 @@ const RADIO_EVENT_BY_COMMAND: Record<MoralCommand, RadioEvent> = {
   ABORT_EXTRACTION: 'EXTRACTION_ABORTED',
 };
 
+const MEMORY_COMMAND = 'ARE_YOU_STILL_HERE';
+
 export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth, setPlayerHealth, dialogues, onDialogueEnd, onBossDefeat, onRestart }: FightBoxProps) {
   const language = useGameStore((state: GameState) => state.language);
   const recordCombatEvent = useGameStore((state: GameState) => state.recordCombatEvent);
@@ -90,6 +92,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
   const [antivirusNoise, setAntivirusNoise] = useState(false);
   const [screenSplit, setScreenSplit] = useState(false);
   const [impactShake, setImpactShake] = useState(false);
+  const [siblingAssistActive, setSiblingAssistActive] = useState(false);
   
   const [empUsed, setEmpUsed] = useState(false); // Savaş başına 1 kullanım sınırı için eklendi
   // Kardeş Yardım Çağrısı
@@ -99,29 +102,55 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
   const reactionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const radioTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const impactTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const siblingAssistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const criticalAssistUsedRef = useRef(false);
   const lastReactionRef = useRef<string | null>(null);
 
   const combatFrozen = isPaused || moralThreshold !== null;
-  const { playSuccess, playDamage, playEmp, playDecision } = useGameAudio(
+  const { playSuccess, playDamage, playEmp, playDecision, playKey } = useGameAudio(
     sibling.heartRate,
     phase === 'combat' && !combatFrozen && bossHealth > 0 && playerHealth > 0,
   );
 
   const currentWordPool = WORD_POOLS[currentBoss];
+  const repeatableWordPool = useMemo(
+    () => currentWordPool.filter((word) => word.word !== MEMORY_COMMAND),
+    [currentWordPool],
+  );
 
   // Yeni kelime seçici
   const pickNewWords = useCallback(() => {
-    setActiveWords(selectCompatibleWords(currentWordPool, 3));
+    setActiveWords(selectCompatibleWords(repeatableWordPool, 3));
     setPlayerTarget(null);
     setPlayerTyped("");
     setBossTarget(null);
     setBossTyped("");
-  }, [currentWordPool]);
+  }, [repeatableWordPool]);
+
+  const revealMemoryCommand = useCallback(() => {
+    const memoryWord = currentWordPool.find((word) => word.word === MEMORY_COMMAND);
+    if (!memoryWord) {
+      pickNewWords();
+      return;
+    }
+    // Son darbede başka hedef bırakmayarak çocukluk kodunu gerçek bir oynanış anına dönüştür.
+    setActiveWords([memoryWord]);
+    setPlayerTarget(null);
+    setPlayerTyped("");
+    setBossTarget(null);
+    setBossTyped("");
+  }, [currentWordPool, pickNewWords]);
 
   const showReaction = useCallback((message: string) => {
     setReactionMessage(message);
     if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current);
     reactionTimeoutRef.current = setTimeout(() => setReactionMessage(null), 3600);
+  }, []);
+
+  const activateSiblingAssist = useCallback((duration = 3400) => {
+    setSiblingAssistActive(true);
+    if (siblingAssistTimeoutRef.current) clearTimeout(siblingAssistTimeoutRef.current);
+    siblingAssistTimeoutRef.current = setTimeout(() => setSiblingAssistActive(false), duration);
   }, []);
 
   const showRadio = useCallback((message: DialogueLine) => {
@@ -143,6 +172,22 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
     lastReactionRef.current = selected;
     return selected;
   }, []);
+
+  useEffect(() => {
+    if (
+      phase !== 'combat' || combatFrozen || playerHealth <= 0 || playerHealth > 350 ||
+      bossHealth <= 0 || criticalAssistUsedRef.current
+    ) return;
+
+    criticalAssistUsedRef.current = true;
+    const timer = setTimeout(() => {
+      activateSiblingAssist(5200);
+      showReaction(language === 'tr'
+        ? 'Nabzın düşüyor. Hattı tutuyorum; onun komutlarını birkaç saniye yavaşlatabilirim.'
+        : 'Your pulse is dropping. I can hold the line and slow its commands for a few seconds.');
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [phase, combatFrozen, playerHealth, bossHealth, activateSiblingAssist, showReaction, language]);
 
   // 1. Evre: Boss Diyalog Animasyonu
   useEffect(() => {
@@ -209,10 +254,14 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
     showReaction(chooseRandom(DIALOGUES.sibling_reactions.moral[command]));
     showRadio(DIALOGUES.civilian_radio[RADIO_EVENT_BY_COMMAND[command]]);
     playDecision();
-    pickNewWords();
+    if (currentBoss === 'FINAL_BOSS' && moralThreshold === 15) {
+      revealMemoryCommand();
+    } else {
+      pickNewWords();
+    }
     setMoralTyped("");
     setMoralThreshold(null);
-  }, [moralThreshold, resolveMoralDecision, showReaction, chooseRandom, DIALOGUES, showRadio, playDecision, pickNewWords]);
+  }, [moralThreshold, resolveMoralDecision, showReaction, chooseRandom, DIALOGUES, showRadio, playDecision, pickNewWords, currentBoss, revealMemoryCommand]);
 
   useEffect(() => {
     if (phase !== 'combat' || moralThreshold !== null || bossHealth <= 0 || playerHealth <= 0) return;
@@ -242,6 +291,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
     const handleMoralInput = (event: KeyboardEvent) => {
       if (event.key === 'Escape' || event.key === 'Backspace') {
         event.preventDefault();
+        playKey(true);
         setMoralTyped((current) => current.slice(0, -1));
         return;
       }
@@ -249,6 +299,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
 
       const nextValue = moralTyped + event.key.toUpperCase();
       const candidates = choices.filter((choice) => choice.startsWith(nextValue));
+      playKey(candidates.length > 0);
       recordKeystroke(candidates.length > 0);
       if (candidates.length === 0) return;
 
@@ -259,7 +310,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
 
     window.addEventListener('keydown', handleMoralInput);
     return () => window.removeEventListener('keydown', handleMoralInput);
-  }, [phase, isPaused, moralThreshold, moralTyped, recordKeystroke, completeMoralChoice]);
+  }, [phase, isPaused, moralThreshold, moralTyped, recordKeystroke, completeMoralChoice, playKey]);
 
   useEffect(() => {
     if (phase !== 'combat' || combatFrozen || bossHealth <= 0 || playerHealth <= 0) return;
@@ -310,7 +361,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
     if (!bossTarget && activeWordsRef.current.length > 0) {
       const timer = setTimeout(() => {
         // Boss AI: Tuzaklara (trap) veya Şifreli (encrypted) düğümlere saldırmaz.
-        const words = activeWordsRef.current.filter(w => w.type !== 'trap' && w.type !== 'encrypted');
+        const words = activeWordsRef.current.filter(w => w.type !== 'trap' && w.type !== 'encrypted' && w.word !== MEMORY_COMMAND);
         if (words.length > 0) {
            const randomWord = words[Math.floor(Math.random() * words.length)].word;
            setBossTarget(randomWord);
@@ -325,7 +376,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
   useEffect(() => {
     if (phase !== "combat" || combatFrozen || bossHealth <= 0 || playerHealth <= 0 || !bossTarget) return;
 
-    const typingSpeed = BOSS_CONFIGS[currentBoss].typingSpeed;
+    const typingSpeed = BOSS_CONFIGS[currentBoss].typingSpeed * (siblingAssistActive ? 1.9 : 1);
 
     const bossInterval = setInterval(() => {
       setBossTyped((prev) => {
@@ -337,7 +388,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
     }, typingSpeed);
 
     return () => clearInterval(bossInterval);
-  }, [phase, combatFrozen, bossTarget, bossHealth, playerHealth, currentBoss]);
+  }, [phase, combatFrozen, bossTarget, bossHealth, playerHealth, currentBoss, siblingAssistActive]);
 
   useEffect(() => {
     if (phase !== 'combat' || combatFrozen || bossHealth <= 0 || playerHealth <= 0) return;
@@ -411,6 +462,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
     if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current);
     if (radioTimeoutRef.current) clearTimeout(radioTimeoutRef.current);
     if (impactTimeoutRef.current) clearTimeout(impactTimeoutRef.current);
+    if (siblingAssistTimeoutRef.current) clearTimeout(siblingAssistTimeoutRef.current);
   }, []);
 
   // 4. Player Input (Klavye Dinleyici)
@@ -424,6 +476,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
         return;
       }
       if (e.key === "Escape") {
+        playKey(true);
         setPlayerTarget(null);
         setPlayerTyped("");
         return;
@@ -439,12 +492,14 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
 
         const nextStr = playerTyped + char;
         const candidates = activeWordsRef.current.filter((word) => word.word.startsWith(nextStr));
+        playKey(candidates.length > 0);
         recordKeystroke(candidates.length > 0);
         if (candidates.length > 0) {
           setPlayerTarget(candidates.length === 1 ? candidates[0].word : null);
           setPlayerTyped(nextStr);
         }
       } else if (e.key === "Backspace") {
+        playKey(true);
         const newVal = playerTyped.slice(0, -1);
         const candidates = newVal
           ? activeWordsRef.current.filter((word) => word.word.startsWith(newVal))
@@ -456,7 +511,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [phase, combatFrozen, bossHealth, playerHealth, triggerEMP, playerTyped, recordKeystroke]);
+  }, [phase, combatFrozen, bossHealth, playerHealth, triggerEMP, playerTyped, recordKeystroke, playKey]);
 
   // 5. Kelime Tamamlanma Kontrolü (Win/Loss)
   const handleWordComplete = useCallback((completedWord: string, winner: 'player' | 'boss') => {
@@ -484,6 +539,10 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
 
       if (wordObj.type !== 'trap' && (runStats.currentCombo + 1) % 5 === 0) {
         showReaction(chooseRandom(DIALOGUES.sibling_reactions.combo));
+        activateSiblingAssist();
+      }
+      if (completedWord === MEMORY_COMMAND) {
+        showReaction(chooseRandom(DIALOGUES.sibling_reactions.stillHere));
       }
     } else {
       setPlayerHealth(h => Math.max(0, h - wordObj.damage));
@@ -504,7 +563,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
       }
 
       const otherWords = nextWords.filter((_, wordIndex) => wordIndex !== index);
-      const available = shuffleWords(currentWordPool).filter((candidate) =>
+      const available = shuffleWords(repeatableWordPool).filter((candidate) =>
         !otherWords.some((word) => word.word === candidate.word) &&
         otherWords.every((word) => !hasPrefixConflict(word.word, candidate.word))
       );
@@ -512,12 +571,14 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
       return nextWords;
     });
 
-    setPlayerTarget(pt => pt === completedWord ? null : pt);
-    setPlayerTyped(pt => pt === completedWord ? "" : pt);
+    // Ekrandaki düğüm değiştiğinde eski oyuncu girdisi yeni kelimeye taşınmamalı.
+    // Boss önce bitirse bile terminal satırı her zaman temizlenir.
+    setPlayerTarget(null);
+    setPlayerTyped("");
     
     setBossTarget(bt => bt === completedWord ? null : bt);
     setBossTyped(bt => bt === completedWord ? "" : bt);
-  }, [bossHealth, playerHealth, setBossHealth, setPlayerHealth, recordCombatEvent, currentWordPool, playDamage, triggerImpact, showReaction, chooseRandom, DIALOGUES, playSuccess, runStats.currentCombo]);
+  }, [bossHealth, playerHealth, setBossHealth, setPlayerHealth, recordCombatEvent, repeatableWordPool, playDamage, triggerImpact, showReaction, chooseRandom, DIALOGUES, playSuccess, runStats.currentCombo, activateSiblingAssist]);
 
   useEffect(() => {
     if (phase !== "combat" || combatFrozen || bossHealth <= 0 || playerHealth <= 0) return;
@@ -559,10 +620,15 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
           <span>WPM {wpm}</span>
           <span>ACC {accuracy}%</span>
           <span className={runStats.currentCombo >= 5 ? 'text-yellow-400 animate-pulse' : 'text-gray-500'}>COMBO x{runStats.currentCombo}</span>
+          {siblingAssistActive && (
+            <span className="text-purple-400 animate-pulse">
+              {language === 'tr' ? 'KARDEŞ HATTI: BOSS YAVAŞLADI' : 'SIBLING LINK: BOSS SLOWED'}
+            </span>
+          )}
         </div>
       )}
 
-      {mechanicMessage && (
+      {mechanicMessage && !reactionMessage && !siblingPlea && !radioMessage && (
         <p className="absolute top-10 left-1/2 -translate-x-1/2 z-20 text-xs text-red-400 bg-black/90 border border-red-900 px-3 py-1 animate-pulse">
           {mechanicMessage}
         </p>
@@ -633,31 +699,31 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="absolute top-[27%] left-1/2 -translate-x-1/2 z-30 bg-black/90 px-4 py-3 w-[88%] max-w-xl text-center border border-purple-800 pointer-events-none"
+          className="absolute top-9 left-1/2 -translate-x-1/2 z-30 bg-black/90 px-4 py-2 w-[88%] max-w-xl text-center border border-purple-800 pointer-events-none"
         >
-          <p className="text-[10px] text-purple-500 tracking-widest mb-2">[{language === 'tr' ? 'KARDEŞ // CANLI SİNYAL' : 'SIBLING // LIVE SIGNAL'}]</p>
-          <p className="text-purple-300 font-mono text-sm sm:text-base leading-snug">“{reactionMessage}”</p>
+          <p className="text-[9px] text-purple-500 tracking-widest mb-1">[{language === 'tr' ? 'KARDEŞ // CANLI SİNYAL' : 'SIBLING // LIVE SIGNAL'}]</p>
+          <p className="text-purple-300 font-mono text-xs sm:text-sm leading-snug">“{reactionMessage}”</p>
         </motion.div>
       )}
 
-      {siblingPlea && !reactionMessage && (
+      {siblingPlea && !reactionMessage && !radioMessage && (
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          className="absolute top-[27%] left-1/2 -translate-x-1/2 z-20 bg-black/85 px-4 py-3 rounded-lg border border-red-700 pointer-events-none"
+          className="absolute top-9 left-1/2 -translate-x-1/2 z-20 bg-black/85 px-4 py-2 rounded-lg border border-red-700 pointer-events-none"
         >
-          <p className="text-red-500 font-mono text-2xl animate-pulse drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]">
+          <p className="text-red-500 font-mono text-sm animate-pulse drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]">
             &gt; {siblingPlea}
           </p>
         </motion.div>
       )}
 
-      {radioMessage && (
+      {radioMessage && !reactionMessage && (
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="absolute bottom-14 left-4 z-30 max-w-[75%] border-l-2 border-yellow-700 bg-black/90 px-3 py-2"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-9 left-1/2 -translate-x-1/2 z-30 w-[88%] max-w-xl border-l-2 border-yellow-700 bg-black/90 px-3 py-2 pointer-events-none"
         >
           <p className="text-[10px] text-yellow-600 tracking-wider">[{radioMessage.speaker}]</p>
           <p className="text-xs text-yellow-200 mt-1">“{radioMessage.text}”</p>
@@ -691,7 +757,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-6 sm:gap-10 items-center font-mono text-xl sm:text-2xl tracking-widest relative w-full mt-4">
+        <div className="flex flex-col gap-2 sm:gap-3 items-center font-mono text-xl sm:text-2xl tracking-widest relative w-full mt-10">
           
           {phase === "combat" && bossHealth > 0 && playerHealth > 0 && (
             <div className={`absolute -top-10 sm:-top-16 left-0 text-xs sm:text-sm font-mono z-30 transition-colors ${empUsed ? 'text-red-900 line-through' : 'text-gray-500 animate-pulse'}`}>
@@ -707,7 +773,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
             const isEncrypted = wordObj.type === 'encrypted';
 
             return (
-              <div key={wordObj.word} className={`flex flex-col items-center relative w-full group ${currentBoss === 'FINAL_BOSS' || isTrap ? 'animate-[shake_0.5s_ease-in-out_infinite]' : ''}`}>
+              <div key={wordObj.word} className={`flex flex-col items-center relative w-full min-h-[74px] group ${currentBoss === 'FINAL_BOSS' || isTrap ? 'animate-[shake_0.5s_ease-in-out_infinite]' : ''}`}>
                 <div className="text-red-500 mb-1 flex drop-shadow-[0_0_5px_rgba(239,68,68,0.8)] h-6 justify-center w-full transition-all">
                   {wordObj.word.split('').map((char, idx) => (
                     <span key={`boss-${idx}`} className={isBossTarget && idx < bossTyped.length ? 'opacity-100' : 'opacity-0'}>{char}</span>
@@ -722,9 +788,9 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
                   <span className="flex transition-colors duration-300">
                     {wordObj.word.split('').map((char, idx) => {
                       const isTyped = (isPlayerTarget || isPlayerCandidate) && idx < playerTyped.length;
-                      let charColor = isTyped ? 'opacity-0' : 'opacity-50';
-                      if (isTrap) charColor = isTyped ? 'opacity-0' : 'text-red-500 opacity-80';
-                      if (isEncrypted) charColor = isTyped ? 'opacity-0' : 'text-purple-400 opacity-80';
+                      let charColor = isTyped ? 'text-green-900 opacity-35' : 'opacity-50';
+                      if (isTrap) charColor = isTyped ? 'text-red-950 opacity-35' : 'text-red-500 opacity-80';
+                      if (isEncrypted) charColor = isTyped ? 'text-purple-950 opacity-35' : 'text-purple-400 opacity-80';
                       
                       return (
                         <span key={`target-${idx}`} className={charColor}>{char}</span>
@@ -737,7 +803,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
                   </span>
                 </div>
 
-                <div className={`mt-1 flex h-6 justify-center w-full absolute top-7 ${isTrap ? 'text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]' : isEncrypted ? 'text-purple-400 drop-shadow-[0_0_5px_rgba(192,132,252,0.8)]' : 'text-green-400 drop-shadow-[0_0_5px_rgba(74,222,128,0.8)]'}`}>
+                <div className={`mt-1 flex h-6 justify-center w-full ${isTrap ? 'text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]' : isEncrypted ? 'text-purple-400 drop-shadow-[0_0_5px_rgba(192,132,252,0.8)]' : 'text-green-400 drop-shadow-[0_0_5px_rgba(74,222,128,0.8)]'}`}>
                   {wordObj.word.split('').map((char, idx) => (
                     <span key={`player-${idx}`} className={(isPlayerTarget || isPlayerCandidate) && idx < playerTyped.length ? 'opacity-100' : 'opacity-0'}>{char}</span>
                   ))}

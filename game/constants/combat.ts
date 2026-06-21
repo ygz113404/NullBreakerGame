@@ -46,6 +46,7 @@ export const WORD_POOLS: Record<BossType, WordNode[]> = {
     { word: 'AI_LOGIC_FAULT', damage: 180 },
   ],
   FINAL_BOSS: [
+    { word: 'ARE_YOU_STILL_HERE', damage: 300 },
     { word: 'SEVER_CONNECTION', damage: 100 },
     { word: 'DONT_LEAVE_ME', damage: 200, type: 'trap' },
     { word: 'LET_ME_GO', damage: 150 },

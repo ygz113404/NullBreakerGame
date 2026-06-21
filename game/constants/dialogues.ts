@@ -96,6 +96,15 @@ export const getDialogues = (language: Language) => ({
       "İlk kez makinenin sesi seninkinden daha kısık.",
       "Ritmi bozma. Onu takip ederek eve dönüyorum.",
     ],
+    stillHere: language === "en" ? [
+      "Always. You typed, so I answered.",
+      "I remember the dark room. I remember our code.",
+      "Still here, brother. Somewhere beneath the machine, I'm still here.",
+    ] : [
+      "Her zaman. Sen yazdın, ben cevap verdim.",
+      "O karanlık odayı hatırlıyorum. Kodumuzu hatırlıyorum.",
+      "Hâlâ buradayım abi. Makinenin altında bir yerde, hâlâ buradayım.",
+    ],
     moral: {
       REROUTE_TO_CATALYST: language === "en" ? [
         "More power... but whose lights did you turn off for me?",

@@ -29,6 +29,19 @@ Son güncelleme: 21 Haziran 2026
 - [x] Web Audio kalp atışı, ambient katman, başarı/hasar/EMP sesleri ve kritik karar sessizliği.
 - [x] Hasar/EMP ekran sarsıntısı ve final karar-performans özeti.
 - [x] Canlı sinyal tepki havuzları genişletildi, aynı mesajın art arda seçilmesi engellendi ve mesaj kutusu kelimeleri kapatmaması için üst bölgeye taşındı.
+- [x] Düşük sesli synth arka plan müziği ve doğru/hatalı tuşlar için mekanik klavye sesi eklendi.
+- [x] Oyuncunun yazdığı karakterler hedef kelimenin altındaki sabit satıra taşındı; üç hedefin yüksekliği sabitlenerek UI kayması giderildi.
+- [x] Boss bir kelimeyi önce tamamladığında oyuncunun yarım kalan terminal girdisi artık kesin olarak temizleniyor.
+- [x] Kardeş ve sivil diyalogları üst hedefi kapatmayan ortak, sabit bir bildirim alanına taşındı.
+
+## Kardeş ve dünya bağı — sıralı geliştirme
+
+- [x] **1 — Ortak çocukluk anısı:** Oyun başlangıcına oyuncunun `STILL_HERE` kodunu bizzat yazdığı kısa, sıcak bir terminal anısı eklendi.
+- [x] **2 — Geri dönen duygusal motif:** Final boss `%15` eşiğinden sonra `ARE_YOU_STILL_HERE` özel komutu açılıyor; boss bu komutu yazamıyor ve kardeş çocukluk koduna özel cevap veriyor.
+- [x] **3 — Tekrarlanan isimli karakterler:** Dr. Lena, Deniz, Nehir, Arda ve Mira görevlerde tanıtılıyor; sonraki ahlaki kararlar bu kişilerin kalıcı durumunu değiştirebiliyor.
+- [x] **4 — Mekanik kardeş yardımı:** Her beşli combo boss yazımını kısa süre yavaşlatıyor. Oyuncu ilk kez kritik cana düştüğünde kardeş bağlantısı daha uzun bir müdahale yapıyor.
+- [x] **5 — Dünyayı oynayarak kurtarma:** Klinik gücü, Sektör-6 tahliyesi ve şehir şebekesi için üç yazma görevi ana hikâye akışına eklendi; toplam 117.000 sivil kurtarılabiliyor.
+- [x] **6 — Kişisel final özeti:** Final ekranında genel sayaçlarla birlikte beş karakterin `GÜVENDE`, `RİSK ALTINDA`, `KAYIP` veya `SİNYAL YOK` durumu ayrı ayrı gösteriliyor.
 
 ## Notlar
 

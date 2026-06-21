@@ -16,13 +16,17 @@ export type BossType = 'FIREWALL' | 'ANTIVIRUS' | 'CORE_AI' | 'FINAL_BOSS';
 
 export type GameScene =
   | 'MENU'
+  | 'CHILDHOOD_MEMORY'
   | 'INTRO'
   | 'PRE_FIREWALL_STORY'
+  | 'RESCUE_CLINIC'
   | 'FIREWALL_PUZZLE'
   | 'FIREWALL_COMBAT'
   | 'EXPLORATION_1'
+  | 'RESCUE_EVACUATION'
   | 'ANTIVIRUS_COMBAT'
   | 'EXPLORATION_2'
+  | 'RESCUE_GRID'
   | 'CORE_AI_COMBAT'
   | 'BREAKING_POINT'
   | 'FINAL_BOSS_COMBAT'
@@ -44,6 +48,14 @@ export type RadioEvent =
   | 'SECTOR_EVACUATED'
   | 'LIFE_SUPPORT_DRAINED'
   | 'EXTRACTION_ABORTED';
+
+export type RescueMission = 'CLINIC' | 'EVACUATION' | 'GRID';
+
+export type WorldCharacter = 'NEHIR' | 'ARDA' | 'LENA' | 'DENIZ' | 'MIRA';
+
+export type CharacterFate = 'UNKNOWN' | 'SAFE' | 'AT_RISK' | 'LOST';
+
+export type CharacterFates = Record<WorldCharacter, CharacterFate>;
 
 export interface MoralDecision {
   command: MoralCommand;
@@ -83,12 +95,15 @@ export interface GameState {
   runStats: RunStats;
   moralDecisions: MoralDecision[];
   radioEvents: RadioEvent[];
+  characterFates: CharacterFates;
   ending: EndingType | null;
 
   setLanguage: (language: Language) => void;
   startGame: () => void;
+  completeChildhoodMemory: () => void;
   completeIntro: () => void;
   completeStory: () => void;
+  completeRescueMission: (mission: RescueMission, mistakes: number) => void;
   completePuzzle: (failedAttempts: number) => void;
   setBossHealth: (value: NumericStateAction) => void;
   setPlayerHealth: (value: NumericStateAction) => void;

@@ -2,11 +2,13 @@ import { create } from 'zustand';
 import { BOSS_CONFIGS } from '../game/constants/combat';
 import {
   BossType,
+  CharacterFates,
   CombatEvent,
   GameState,
   MoralCommand,
   NumericStateAction,
   RadioEvent,
+  RescueMission,
   RunStats,
 } from '../types/game';
 
@@ -36,6 +38,14 @@ const initialRunStats: RunStats = {
   civiliansSaved: 0,
 };
 
+const initialCharacterFates: CharacterFates = {
+  NEHIR: 'UNKNOWN',
+  ARDA: 'UNKNOWN',
+  LENA: 'UNKNOWN',
+  DENIZ: 'UNKNOWN',
+  MIRA: 'UNKNOWN',
+};
+
 const PLAYER_MAX_HEALTH = 1000;
 
 const clamp = (value: number, min = 0, max = 100) =>
@@ -61,37 +71,69 @@ export const useGameStore = create<GameState>()((set) => ({
   runStats: { ...initialRunStats },
   moralDecisions: [],
   radioEvents: [],
+  characterFates: { ...initialCharacterFates },
   ending: null,
 
   setLanguage: (language) => set({ language }),
 
   startGame: () => set((state) => ({
-    scene: 'INTRO',
+    scene: 'CHILDHOOD_MEMORY',
     city: { ...initialCityState },
     sibling: { ...initialSiblingState },
     ...combatStateFor('FIREWALL'),
     runStats: { ...initialRunStats },
     moralDecisions: [],
     radioEvents: [],
+    characterFates: { ...initialCharacterFates },
     ending: null,
     language: state.language,
   })),
+
+  completeChildhoodMemory: () => set({ scene: 'INTRO' }),
 
   completeIntro: () => set({ scene: 'PRE_FIREWALL_STORY' }),
 
   completeStory: () => set((state) => {
     switch (state.scene) {
       case 'PRE_FIREWALL_STORY':
-        return { scene: 'FIREWALL_PUZZLE' };
+        return { scene: 'RESCUE_CLINIC' };
       case 'EXPLORATION_1':
-        return { scene: 'ANTIVIRUS_COMBAT', ...combatStateFor('ANTIVIRUS') };
+        return { scene: 'RESCUE_EVACUATION' };
       case 'EXPLORATION_2':
-        return { scene: 'CORE_AI_COMBAT', ...combatStateFor('CORE_AI') };
+        return { scene: 'RESCUE_GRID' };
       case 'BREAKING_POINT':
         return { scene: 'FINAL_BOSS_COMBAT', ...combatStateFor('FINAL_BOSS') };
       default:
         return {};
     }
+  }),
+
+  completeRescueMission: (mission: RescueMission, mistakes) => set((state) => {
+    const city = { ...state.city };
+    const characterFates = { ...state.characterFates };
+    const runStats = { ...state.runStats };
+    const precisionBonus = Math.max(0, 5 - mistakes);
+
+    if (mission === 'CLINIC') {
+      characterFates.LENA = 'SAFE';
+      runStats.civiliansSaved += 12000;
+      city.gridStatus = clamp(city.gridStatus + 2 + precisionBonus * 0.2);
+      return { scene: 'FIREWALL_PUZZLE', city, characterFates, runStats };
+    }
+
+    if (mission === 'EVACUATION') {
+      characterFates.NEHIR = 'SAFE';
+      characterFates.ARDA = 'SAFE';
+      characterFates.DENIZ = 'SAFE';
+      runStats.civiliansSaved += 75000;
+      city.cityHealth = clamp(city.cityHealth + 2 + precisionBonus * 0.2);
+      return { scene: 'ANTIVIRUS_COMBAT', city, characterFates, runStats, ...combatStateFor('ANTIVIRUS') };
+    }
+
+    characterFates.MIRA = 'SAFE';
+    runStats.civiliansSaved += 30000;
+    city.gridStatus = clamp(city.gridStatus + 7 + precisionBonus * 0.3);
+    return { scene: 'CORE_AI_COMBAT', city, characterFates, runStats, ...combatStateFor('CORE_AI') };
   }),
 
   completePuzzle: (failedAttempts) => set((state) => ({
@@ -178,6 +220,7 @@ export const useGameStore = create<GameState>()((set) => ({
     const city = { ...state.city };
     const sibling = { ...state.sibling };
     const runStats = { ...state.runStats };
+    const characterFates = { ...state.characterFates };
     let bossHealth = state.bossHealth;
     let radioEvent: RadioEvent;
 
@@ -190,6 +233,7 @@ export const useGameStore = create<GameState>()((set) => ({
         sibling.neuroStress = clamp(sibling.neuroStress - 12);
         sibling.heartRate = clamp(sibling.heartRate - 10, 65, 220);
         radioEvent = 'SECTOR_DARK';
+        if (characterFates.MIRA !== 'LOST') characterFates.MIRA = 'AT_RISK';
         break;
       case 'EVACUATE_SECTOR':
         city.cityHealth = clamp(city.cityHealth + 2);
@@ -198,6 +242,9 @@ export const useGameStore = create<GameState>()((set) => ({
         sibling.neuroStress = clamp(sibling.neuroStress + 2);
         bossHealth = clamp(bossHealth + state.bossMaxHealth * 0.12, 0, state.bossMaxHealth);
         radioEvent = 'SECTOR_EVACUATED';
+        characterFates.NEHIR = 'SAFE';
+        characterFates.ARDA = 'SAFE';
+        characterFates.DENIZ = 'SAFE';
         break;
       case 'DRAIN_LIFE_SUPPORT':
         city.cityHealth = clamp(city.cityHealth - 9);
@@ -206,7 +253,12 @@ export const useGameStore = create<GameState>()((set) => ({
         sibling.stabilityIndex = clamp(sibling.stabilityIndex + 6);
         sibling.neuroStress = clamp(sibling.neuroStress - 4);
         bossHealth = clamp(bossHealth - state.bossMaxHealth * 0.22, 0, state.bossMaxHealth);
+        if (state.currentBoss === 'FINAL_BOSS' && threshold === 15) {
+          // Ortak çocukluk kodunun final darbesi olabilmesi için bağlantıyı tek canla açık tut.
+          bossHealth = Math.max(1, bossHealth);
+        }
         radioEvent = 'LIFE_SUPPORT_DRAINED';
+        characterFates.LENA = 'LOST';
         break;
       case 'ABORT_EXTRACTION':
         city.cityHealth = clamp(city.cityHealth + 4);
@@ -216,6 +268,7 @@ export const useGameStore = create<GameState>()((set) => ({
         sibling.heartRate = clamp(sibling.heartRate + 10, 65, 220);
         bossHealth = clamp(bossHealth + state.bossMaxHealth * 0.05, 0, state.bossMaxHealth);
         radioEvent = 'EXTRACTION_ABORTED';
+        if (characterFates.MIRA !== 'LOST') characterFates.MIRA = 'SAFE';
         break;
     }
 
@@ -223,6 +276,7 @@ export const useGameStore = create<GameState>()((set) => ({
       city,
       sibling,
       runStats,
+      characterFates,
       bossHealth,
       radioEvents: [...state.radioEvents, radioEvent].slice(-8),
       moralDecisions: [...state.moralDecisions, {
@@ -265,6 +319,10 @@ export const useGameStore = create<GameState>()((set) => ({
   }),
 
   selectEnding: (ending) => set((state) => {
+    const stabilizeSurvivors = Object.fromEntries(
+      Object.entries(state.characterFates).map(([character, fate]) => [character, fate === 'AT_RISK' ? 'SAFE' : fate])
+    ) as CharacterFates;
+
     if (ending === 'B_SACRIFICE') {
       return {
         ending,
@@ -274,6 +332,7 @@ export const useGameStore = create<GameState>()((set) => ({
           cityHealth: Math.max(60, state.city.cityHealth),
           gridStatus: Math.max(70, state.city.gridStatus),
         },
+        characterFates: stabilizeSurvivors,
       };
     }
 
@@ -286,10 +345,14 @@ export const useGameStore = create<GameState>()((set) => ({
           neuroStress: 35,
           stabilityIndex: Math.max(70, state.sibling.stabilityIndex),
         },
+        characterFates: stabilizeSurvivors,
       };
     }
 
-    return { ending, scene: 'ENDING' };
+    const darknessFates = Object.fromEntries(
+      Object.entries(state.characterFates).map(([character, fate]) => [character, fate === 'AT_RISK' ? 'LOST' : fate])
+    ) as CharacterFates;
+    return { ending, scene: 'ENDING', characterFates: darknessFates };
   }),
 
   resetGame: () => set((state) => ({
@@ -300,6 +363,7 @@ export const useGameStore = create<GameState>()((set) => ({
     runStats: { ...initialRunStats },
     moralDecisions: [],
     radioEvents: [],
+    characterFates: { ...initialCharacterFates },
     ending: null,
     language: state.language,
   })),
