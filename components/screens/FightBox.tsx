@@ -3,70 +3,67 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { getDialogues, DialogueLine } from '../../game/constants/dialogues';
+import { BOSS_CONFIGS, WORD_POOLS, WordNode } from '../../game/constants/combat';
+import { useGameAudio } from '../../hooks/useGameAudio';
 import { useGameStore } from '../../store/useGameStore';
-import { GameState } from '../../types/game';
-
-type WordNode = {
-  word: string;
-  damage: number;
-  type?: 'normal' | 'trap' | 'encrypted';
-  revealWord?: string; // Şifre çözüldüğünde ortaya çıkacak kelime
-};
-
-// Boss'lara Özel Hasar ve Kelime Havuzları
-const WORD_POOLS: Record<string, WordNode[]> = {
-  FIREWALL: [
-    { word: "OVERRIDE_GATE", damage: 150 },
-    { word: "BYPASS_TURRET", damage: 100 },
-    { word: "KILL_PROCESS", damage: 120 },
-    { word: "SYS_CORRUPTION", damage: 150, type: "trap" },
-    { word: "DECRYPT", damage: 150, type: "encrypted", revealWord: "INJECT_PAYLOAD" },
-    { word: "INJECT_PAYLOAD", damage: 200 },
-    { word: "DISABLE_FIREWALL", damage: 180 },
-    { word: "DECRYPT_KEY", damage: 90 },
-  ],
-  ANTIVIRUS: [
-    { word: "QUARANTINE_BREACH", damage: 100 },
-    { word: "SYS_32_CORRUPT", damage: 130 },
-    { word: "IGNORE_ME", damage: 150, type: "trap" },
-    { word: "DECRYPT", damage: 180, type: "encrypted", revealWord: "PURGE_MALWARE" },
-    { word: "0XFA8B_KILL", damage: 150 },
-    { word: "PURGE_MALWARE", damage: 180 },
-    { word: "ERASE_SIGNATURE", damage: 120 },
-  ],
-  CORE_AI: [
-    { word: "MNEMONIC_WIPE", damage: 150 },
-    { word: "OVERLOAD_CORE", damage: 200 },
-    { word: "AI_TRAP_0X", damage: 200, type: "trap" },
-    { word: "FORMAT_C", damage: 250 },
-    { word: "DECRYPT", damage: 170, type: "encrypted", revealWord: "BYPASS_NEURAL_NET" },
-    { word: "AI_LOGIC_FAULT", damage: 180 },
-    { word: "BYPASS_NEURAL_NET", damage: 170 },
-  ],
-  FINAL_BOSS: [
-    { word: "SEVER_CONNECTION", damage: 100 },
-    { word: "DONT_LEAVE_ME", damage: 200, type: "trap" },
-    { word: "LET_ME_GO", damage: 150 },
-    { word: "BREAK_THE_CHAINS", damage: 200 },
-    { word: "DECRYPT", damage: 250, type: "encrypted", revealWord: "WAKE_UP" },
-    { word: "WAKE_UP", damage: 250 },
-  ]
-};
+import { BossType, GameState, MoralCommand, NumericStateAction, RadioEvent } from '../../types/game';
 
 interface FightBoxProps {
-  currentBoss: string;
+  currentBoss: BossType;
   bossHealth: number;
-  setBossHealth: React.Dispatch<React.SetStateAction<number>>;
+  setBossHealth: (value: NumericStateAction) => void;
   playerHealth: number;
-  setPlayerHealth: React.Dispatch<React.SetStateAction<number>>;
+  setPlayerHealth: (value: NumericStateAction) => void;
   dialogues: DialogueLine[];
   onDialogueEnd?: () => void;
   onBossDefeat?: () => void;
   onRestart?: () => void;
 }
 
+const shuffleWords = (words: WordNode[]) => {
+  const shuffled = [...words];
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+};
+
+const hasPrefixConflict = (first: string, second: string) =>
+  first.startsWith(second) || second.startsWith(first);
+
+const selectCompatibleWords = (pool: WordNode[], count: number) => {
+  const selected: WordNode[] = [];
+  for (const candidate of shuffleWords(pool)) {
+    if (selected.every((word) => !hasPrefixConflict(word.word, candidate.word))) {
+      selected.push(candidate);
+    }
+    if (selected.length === count) break;
+  }
+  return selected;
+};
+
+const MORAL_CHOICES: Record<number, [MoralCommand, MoralCommand]> = {
+  70: ['REROUTE_TO_CATALYST', 'EVACUATE_SECTOR'],
+  40: ['DRAIN_LIFE_SUPPORT', 'ABORT_EXTRACTION'],
+  15: ['REROUTE_TO_CATALYST', 'DRAIN_LIFE_SUPPORT'],
+};
+
+const RADIO_EVENT_BY_COMMAND: Record<MoralCommand, RadioEvent> = {
+  REROUTE_TO_CATALYST: 'SECTOR_DARK',
+  EVACUATE_SECTOR: 'SECTOR_EVACUATED',
+  DRAIN_LIFE_SUPPORT: 'LIFE_SUPPORT_DRAINED',
+  ABORT_EXTRACTION: 'EXTRACTION_ABORTED',
+};
+
 export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth, setPlayerHealth, dialogues, onDialogueEnd, onBossDefeat, onRestart }: FightBoxProps) {
   const language = useGameStore((state: GameState) => state.language);
+  const recordCombatEvent = useGameStore((state: GameState) => state.recordCombatEvent);
+  const recordKeystroke = useGameStore((state: GameState) => state.recordKeystroke);
+  const tickCombatSecond = useGameStore((state: GameState) => state.tickCombatSecond);
+  const resolveMoralDecision = useGameStore((state: GameState) => state.resolveMoralDecision);
+  const sibling = useGameStore((state: GameState) => state.sibling);
+  const runStats = useGameStore((state: GameState) => state.runStats);
   const DIALOGUES = useMemo(() => getDialogues(language), [language]);
   // Oyun Evresi: "dialogue" (Boss Konuşması) -> "combat" (Savaş)
   const [phase, setPhase] = useState<"dialogue" | "combat">("dialogue");
@@ -83,22 +80,69 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
   const [playerTyped, setPlayerTyped] = useState("");
   const [bossTarget, setBossTarget] = useState<string | null>(null);
   const [bossTyped, setBossTyped] = useState("");
+  const [isPaused, setIsPaused] = useState(false);
+  const [moralThreshold, setMoralThreshold] = useState<number | null>(null);
+  const [moralTyped, setMoralTyped] = useState("");
+  const triggeredThresholdsRef = useRef(new Set<number>());
+  const [reactionMessage, setReactionMessage] = useState<string | null>(null);
+  const [radioMessage, setRadioMessage] = useState<DialogueLine | null>(null);
+  const [mechanicMessage, setMechanicMessage] = useState<string | null>(null);
+  const [antivirusNoise, setAntivirusNoise] = useState(false);
+  const [screenSplit, setScreenSplit] = useState(false);
+  const [impactShake, setImpactShake] = useState(false);
   
   const [empUsed, setEmpUsed] = useState(false); // Savaş başına 1 kullanım sınırı için eklendi
   // Kardeş Yardım Çağrısı
   const [siblingPlea, setSiblingPlea] = useState<string | null>(null);
+  const pleaTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const empTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reactionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const radioTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const impactTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastReactionRef = useRef<string | null>(null);
 
-  const currentWordPool = WORD_POOLS[currentBoss as keyof typeof WORD_POOLS] || WORD_POOLS.FIREWALL;
+  const combatFrozen = isPaused || moralThreshold !== null;
+  const { playSuccess, playDamage, playEmp, playDecision } = useGameAudio(
+    sibling.heartRate,
+    phase === 'combat' && !combatFrozen && bossHealth > 0 && playerHealth > 0,
+  );
+
+  const currentWordPool = WORD_POOLS[currentBoss];
 
   // Yeni kelime seçici
   const pickNewWords = useCallback(() => {
-    const shuffled = [...currentWordPool].sort(() => 0.5 - Math.random());
-    setActiveWords(shuffled.slice(0, 3)); // 3 kelime seç
+    setActiveWords(selectCompatibleWords(currentWordPool, 3));
     setPlayerTarget(null);
     setPlayerTyped("");
     setBossTarget(null);
     setBossTyped("");
   }, [currentWordPool]);
+
+  const showReaction = useCallback((message: string) => {
+    setReactionMessage(message);
+    if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current);
+    reactionTimeoutRef.current = setTimeout(() => setReactionMessage(null), 3600);
+  }, []);
+
+  const showRadio = useCallback((message: DialogueLine) => {
+    setRadioMessage(message);
+    if (radioTimeoutRef.current) clearTimeout(radioTimeoutRef.current);
+    radioTimeoutRef.current = setTimeout(() => setRadioMessage(null), 5200);
+  }, []);
+
+  const triggerImpact = useCallback(() => {
+    setImpactShake(true);
+    if (impactTimeoutRef.current) clearTimeout(impactTimeoutRef.current);
+    impactTimeoutRef.current = setTimeout(() => setImpactShake(false), 420);
+  }, []);
+
+  const chooseRandom = useCallback((messages: string[]) => {
+    const alternatives = messages.filter((message) => message !== lastReactionRef.current);
+    const pool = alternatives.length > 0 ? alternatives : messages;
+    const selected = pool[Math.floor(Math.random() * pool.length)];
+    lastReactionRef.current = selected;
+    return selected;
+  }, []);
 
   // 1. Evre: Boss Diyalog Animasyonu
   useEffect(() => {
@@ -115,36 +159,134 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
 
     const fullText = dialogues[dialogueIndex]?.text || "";
     let currentLength = 0;
-    setDialogueLine("");
 
+    let advanceTimer: ReturnType<typeof setTimeout> | undefined;
     const typingInterval = setInterval(() => {
       currentLength++;
       setDialogueLine(fullText.slice(0, currentLength));
       if (currentLength >= fullText.length) {
         clearInterval(typingInterval);
-        setTimeout(() => setDialogueIndex((prev) => prev + 1), 2000);
+        advanceTimer = setTimeout(() => {
+          setDialogueLine("");
+          setDialogueIndex((prev) => prev + 1);
+        }, 2000);
       }
     }, 40);
 
-    return () => clearInterval(typingInterval);
-  }, [phase, dialogueIndex, pickNewWords, dialogues, onDialogueEnd, DIALOGUES]);
+    return () => {
+      clearInterval(typingInterval);
+      if (advanceTimer) clearTimeout(advanceTimer);
+    };
+  }, [phase, dialogueIndex, pickNewWords, dialogues, onDialogueEnd]);
+
+  useEffect(() => {
+    if (phase !== 'combat') return;
+
+    const handlePauseKey = (event: KeyboardEvent) => {
+      if (event.key === 'F2') {
+        event.preventDefault();
+        setIsPaused((paused) => !paused);
+      }
+    };
+    const pauseForVisibility = () => {
+      if (document.hidden) setIsPaused(true);
+    };
+    const pauseForBlur = () => setIsPaused(true);
+
+    window.addEventListener('keydown', handlePauseKey);
+    document.addEventListener('visibilitychange', pauseForVisibility);
+    window.addEventListener('blur', pauseForBlur);
+    return () => {
+      window.removeEventListener('keydown', handlePauseKey);
+      document.removeEventListener('visibilitychange', pauseForVisibility);
+      window.removeEventListener('blur', pauseForBlur);
+    };
+  }, [phase]);
+
+  const completeMoralChoice = useCallback((command: MoralCommand) => {
+    if (moralThreshold === null) return;
+    resolveMoralDecision(command, moralThreshold);
+    showReaction(chooseRandom(DIALOGUES.sibling_reactions.moral[command]));
+    showRadio(DIALOGUES.civilian_radio[RADIO_EVENT_BY_COMMAND[command]]);
+    playDecision();
+    pickNewWords();
+    setMoralTyped("");
+    setMoralThreshold(null);
+  }, [moralThreshold, resolveMoralDecision, showReaction, chooseRandom, DIALOGUES, showRadio, playDecision, pickNewWords]);
+
+  useEffect(() => {
+    if (phase !== 'combat' || moralThreshold !== null || bossHealth <= 0 || playerHealth <= 0) return;
+    const healthPercent = (bossHealth / BOSS_CONFIGS[currentBoss].maxHealth) * 100;
+    const nextThreshold = [70, 40, 15].find((threshold) =>
+      healthPercent <= threshold && !triggeredThresholdsRef.current.has(threshold)
+    );
+    if (!nextThreshold) return;
+
+    const timer = setTimeout(() => {
+      triggeredThresholdsRef.current.add(nextThreshold);
+      setPlayerTarget(null);
+      setPlayerTyped("");
+      setBossTarget(null);
+      setBossTyped("");
+      setMoralTyped("");
+      setMoralThreshold(nextThreshold);
+      playDecision();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [phase, moralThreshold, bossHealth, playerHealth, currentBoss, playDecision]);
+
+  useEffect(() => {
+    if (phase !== 'combat' || isPaused || moralThreshold === null) return;
+    const choices = MORAL_CHOICES[moralThreshold];
+
+    const handleMoralInput = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' || event.key === 'Backspace') {
+        event.preventDefault();
+        setMoralTyped((current) => current.slice(0, -1));
+        return;
+      }
+      if (event.key.length !== 1 || !/[a-zA-Z0-9_]/.test(event.key)) return;
+
+      const nextValue = moralTyped + event.key.toUpperCase();
+      const candidates = choices.filter((choice) => choice.startsWith(nextValue));
+      recordKeystroke(candidates.length > 0);
+      if (candidates.length === 0) return;
+
+      setMoralTyped(nextValue);
+      const completed = candidates.find((choice) => choice === nextValue);
+      if (completed) completeMoralChoice(completed);
+    };
+
+    window.addEventListener('keydown', handleMoralInput);
+    return () => window.removeEventListener('keydown', handleMoralInput);
+  }, [phase, isPaused, moralThreshold, moralTyped, recordKeystroke, completeMoralChoice]);
+
+  useEffect(() => {
+    if (phase !== 'combat' || combatFrozen || bossHealth <= 0 || playerHealth <= 0) return;
+    const timer = setInterval(tickCombatSecond, 1000);
+    return () => clearInterval(timer);
+  }, [phase, combatFrozen, bossHealth, playerHealth, tickCombatSecond]);
 
   // Savaş sırasında kardeşin yardım çağrılarını göster
   useEffect(() => {
-    if (phase !== "combat" || bossHealth <= 0 || playerHealth <= 0) return;
+    if (phase !== "combat" || combatFrozen || bossHealth <= 0 || playerHealth <= 0) return;
 
     const pleaInterval = setInterval(() => {
       const randomPlea = DIALOGUES.sibling_pleas[Math.floor(Math.random() * DIALOGUES.sibling_pleas.length)];
       setSiblingPlea(randomPlea);
       
-      setTimeout(() => {
+      if (pleaTimeoutRef.current) clearTimeout(pleaTimeoutRef.current);
+      pleaTimeoutRef.current = setTimeout(() => {
         setSiblingPlea(null);
       }, 3000); // 3 saniye sonra kaybol
 
     }, 12000); // 12 saniyede bir
 
-    return () => clearInterval(pleaInterval);
-  }, [phase, bossHealth, playerHealth, DIALOGUES]);
+    return () => {
+      clearInterval(pleaInterval);
+      if (pleaTimeoutRef.current) clearTimeout(pleaTimeoutRef.current);
+    };
+  }, [phase, combatFrozen, bossHealth, playerHealth, DIALOGUES]);
 
   // Boss Yenildiğinde Geçiş İçin
   useEffect(() => {
@@ -163,7 +305,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
   }, [activeWords]);
 
   useEffect(() => {
-    if (phase !== "combat" || bossHealth <= 0 || playerHealth <= 0) return;
+    if (phase !== "combat" || combatFrozen || bossHealth <= 0 || playerHealth <= 0) return;
     
     if (!bossTarget && activeWordsRef.current.length > 0) {
       const timer = setTimeout(() => {
@@ -177,17 +319,13 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [phase, bossTarget, bossHealth, playerHealth]);
+  }, [phase, combatFrozen, bossTarget, bossHealth, playerHealth]);
 
   // 3. Boss AI: Yazma İşlemi
   useEffect(() => {
-    if (phase !== "combat" || bossHealth <= 0 || playerHealth <= 0 || !bossTarget) return;
+    if (phase !== "combat" || combatFrozen || bossHealth <= 0 || playerHealth <= 0 || !bossTarget) return;
 
-    // Boss'a göre hız belirle (ms cinsinden harf yazma süresi)
-    let typingSpeed = 350; // Firewall hızı (Yavaş)
-    if (currentBoss === 'ANTIVIRUS') typingSpeed = 280; // Orta
-    if (currentBoss === 'CORE_AI') typingSpeed = 180; // Hızlı
-    if (currentBoss === 'FINAL_BOSS') typingSpeed = 120; // Çok Hızlı ve Agresif
+    const typingSpeed = BOSS_CONFIGS[currentBoss].typingSpeed;
 
     const bossInterval = setInterval(() => {
       setBossTyped((prev) => {
@@ -199,23 +337,85 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
     }, typingSpeed);
 
     return () => clearInterval(bossInterval);
-  }, [phase, bossTarget, bossHealth, playerHealth, currentBoss]);
+  }, [phase, combatFrozen, bossTarget, bossHealth, playerHealth, currentBoss]);
+
+  useEffect(() => {
+    if (phase !== 'combat' || combatFrozen || bossHealth <= 0 || playerHealth <= 0) return;
+    let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+    let messageTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const fireMechanic = () => {
+      const labels = language === 'tr' ? {
+        FIREWALL: 'PAKET TEMİZLENDİ — HEDEFLER YENİLENDİ',
+        ANTIVIRUS: 'İMZA GÜRÜLTÜSÜ — SAHTE KARAKTERLER',
+        CORE_AI: 'HAFIZA TERSİNE ÇEVRİLDİ',
+        FINAL_BOSS: 'ARAYÜZ BÜTÜNLÜĞÜ PARÇALANIYOR',
+      } : {
+        FIREWALL: 'PACKET PURGED — TARGETS REFRESHED',
+        ANTIVIRUS: 'SIGNATURE NOISE — FALSE CHARACTERS',
+        CORE_AI: 'MEMORY ORDER REVERSED',
+        FINAL_BOSS: 'INTERFACE INTEGRITY SPLITTING',
+      };
+      setMechanicMessage(labels[currentBoss]);
+      if (messageTimer) clearTimeout(messageTimer);
+      messageTimer = setTimeout(() => setMechanicMessage(null), 2400);
+
+      if (currentBoss === 'FIREWALL') {
+        pickNewWords();
+      } else if (currentBoss === 'ANTIVIRUS') {
+        setAntivirusNoise(true);
+        recoveryTimer = setTimeout(() => setAntivirusNoise(false), 2600);
+      } else if (currentBoss === 'CORE_AI') {
+        setActiveWords((words) => words.map((word) => ({
+          ...word,
+          word: [...word.word].reverse().join(''),
+        })));
+        setPlayerTarget(null);
+        setPlayerTyped("");
+        setBossTarget(null);
+        setBossTyped("");
+      } else {
+        setScreenSplit(true);
+        recoveryTimer = setTimeout(() => setScreenSplit(false), 2300);
+      }
+    };
+
+    const interval = setInterval(fireMechanic, currentBoss === 'FINAL_BOSS' ? 7000 : 8500);
+    return () => {
+      clearInterval(interval);
+      if (recoveryTimer) clearTimeout(recoveryTimer);
+      if (messageTimer) clearTimeout(messageTimer);
+    };
+  }, [phase, combatFrozen, bossHealth, playerHealth, currentBoss, language, pickNewWords]);
 
   // 3.5 EMP (Aşırı Yükleme) Mekaniği
   const [empActive, setEmpActive] = useState(false);
   const triggerEMP = useCallback(() => {
-    if (empUsed || empActive || phase !== "combat" || playerHealth <= 200 || bossHealth <= 0) return;
+    if (empUsed || empActive || combatFrozen || phase !== "combat" || playerHealth <= 200 || bossHealth <= 0) return;
     setEmpActive(true);
-    setEmpUsed(true); // EMP kullanıldı olarak işaretle
-    setPlayerHealth(h => Math.max(1, h - 200)); // Oyuncu 200 hasar alır
-    setBossHealth(h => Math.max(0, h - 300));   // Boss 300 hasar alır
-    pickNewWords(); // Kelimeler sıfırlanır
-    setTimeout(() => setEmpActive(false), 500); // 0.5s ekran beyaz parlama efekti
-  }, [empUsed, empActive, phase, playerHealth, bossHealth, pickNewWords, setPlayerHealth, setBossHealth]);
+    setEmpUsed(true);
+    setPlayerHealth(h => Math.max(1, h - 200));
+    setBossHealth(h => Math.max(0, h - 300));
+    recordCombatEvent('EMP', 300);
+    playEmp();
+    triggerImpact();
+    showReaction(chooseRandom(DIALOGUES.sibling_reactions.emp));
+    pickNewWords();
+    if (empTimeoutRef.current) clearTimeout(empTimeoutRef.current);
+    empTimeoutRef.current = setTimeout(() => setEmpActive(false), 500);
+  }, [empUsed, empActive, combatFrozen, phase, playerHealth, bossHealth, pickNewWords, recordCombatEvent, setPlayerHealth, setBossHealth, playEmp, triggerImpact, showReaction, chooseRandom, DIALOGUES]);
+
+  useEffect(() => () => {
+    if (empTimeoutRef.current) clearTimeout(empTimeoutRef.current);
+    if (pleaTimeoutRef.current) clearTimeout(pleaTimeoutRef.current);
+    if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current);
+    if (radioTimeoutRef.current) clearTimeout(radioTimeoutRef.current);
+    if (impactTimeoutRef.current) clearTimeout(impactTimeoutRef.current);
+  }, []);
 
   // 4. Player Input (Klavye Dinleyici)
   useEffect(() => {
-    if (phase !== "combat" || bossHealth <= 0 || playerHealth <= 0) return;
+    if (phase !== "combat" || combatFrozen || bossHealth <= 0 || playerHealth <= 0) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === " ") {
@@ -237,64 +437,78 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
           char = 'I';
         }
 
-        setPlayerTyped((prev) => {
-          if (!playerTarget) {
-            const match = activeWordsRef.current.find(w => w.word.startsWith(char));
-            if (match) {
-              setPlayerTarget(match.word);
-              return char;
-            }
-            return prev;
-          } else {
-            const nextStr = prev + char;
-            if (playerTarget.startsWith(nextStr)) {
-              return nextStr;
-            }
-          }
-          return prev;
-        });
+        const nextStr = playerTyped + char;
+        const candidates = activeWordsRef.current.filter((word) => word.word.startsWith(nextStr));
+        recordKeystroke(candidates.length > 0);
+        if (candidates.length > 0) {
+          setPlayerTarget(candidates.length === 1 ? candidates[0].word : null);
+          setPlayerTyped(nextStr);
+        }
       } else if (e.key === "Backspace") {
-        setPlayerTyped((prev) => {
-          const newVal = prev.slice(0, -1);
-          if (newVal === "") setPlayerTarget(null);
-          return newVal;
-        });
+        const newVal = playerTyped.slice(0, -1);
+        const candidates = newVal
+          ? activeWordsRef.current.filter((word) => word.word.startsWith(newVal))
+          : [];
+        setPlayerTarget(candidates.length === 1 ? candidates[0].word : null);
+        setPlayerTyped(newVal);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [phase, playerTarget, bossHealth, playerHealth, triggerEMP]);
+  }, [phase, combatFrozen, bossHealth, playerHealth, triggerEMP, playerTyped, recordKeystroke]);
 
   // 5. Kelime Tamamlanma Kontrolü (Win/Loss)
   const handleWordComplete = useCallback((completedWord: string, winner: 'player' | 'boss') => {
     if (bossHealth <= 0 || playerHealth <= 0) return;
+    const wordObj = activeWordsRef.current.find((word) => word.word === completedWord);
+    if (!wordObj) return;
 
-    setActiveWords(prev => {
-      const nextWords = [...prev];
-      const idx = nextWords.findIndex(w => w.word === completedWord);
-      
-      if (idx !== -1) {
-        const wordObj = nextWords[idx];
-        
-        if (winner === 'player') {
-          if (wordObj.type === 'trap') {
-            setPlayerHealth(h => Math.max(0, h - wordObj.damage)); // Oyuncu tuzağa düştü!
-          } else if (wordObj.type === 'encrypted' && wordObj.revealWord) {
-            // Şifre çözüldü, kelime gerçeğine dönüşüp ekranda kalır.
-            nextWords[idx] = { word: wordObj.revealWord, damage: wordObj.damage, type: 'normal' };
-            return nextWords;
-          } else {
-            setBossHealth(h => Math.max(0, h - wordObj.damage)); // Normal saldırı
-          }
-        } else {
-          setPlayerHealth(h => Math.max(0, h - wordObj.damage)); // Boss oyuncuya vurdu
-        }
+    const isEncryptedReveal = winner === 'player' && wordObj.type === 'encrypted' && wordObj.revealWord;
 
-        const available = currentWordPool.filter(w => !nextWords.some(nw => nw.word === w.word));
-        const fallback = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : currentWordPool[0];
-        nextWords[idx] = fallback;
+    if (winner === 'player') {
+      if (wordObj.type === 'trap') {
+        setPlayerHealth(h => Math.max(0, h - wordObj.damage));
+        recordCombatEvent('TRAP', wordObj.damage);
+        playDamage();
+        triggerImpact();
+        showReaction(chooseRandom(DIALOGUES.sibling_reactions.trap));
+      } else if (isEncryptedReveal) {
+        recordCombatEvent('SUCCESS', 0);
+        playSuccess();
+      } else {
+        setBossHealth(h => Math.max(0, h - wordObj.damage));
+        recordCombatEvent('SUCCESS', wordObj.damage);
+        playSuccess();
       }
+
+      if (wordObj.type !== 'trap' && (runStats.currentCombo + 1) % 5 === 0) {
+        showReaction(chooseRandom(DIALOGUES.sibling_reactions.combo));
+      }
+    } else {
+      setPlayerHealth(h => Math.max(0, h - wordObj.damage));
+      recordCombatEvent('BOSS_HIT', wordObj.damage);
+      playDamage();
+      triggerImpact();
+      if (Math.random() < 0.45) showReaction(chooseRandom(DIALOGUES.sibling_reactions.bossHit));
+    }
+
+    setActiveWords((previousWords) => {
+      const index = previousWords.findIndex((word) => word.word === completedWord);
+      if (index === -1) return previousWords;
+
+      const nextWords = [...previousWords];
+      if (isEncryptedReveal && wordObj.revealWord) {
+        nextWords[index] = { word: wordObj.revealWord, damage: wordObj.damage, type: 'normal' };
+        return nextWords;
+      }
+
+      const otherWords = nextWords.filter((_, wordIndex) => wordIndex !== index);
+      const available = shuffleWords(currentWordPool).filter((candidate) =>
+        !otherWords.some((word) => word.word === candidate.word) &&
+        otherWords.every((word) => !hasPrefixConflict(word.word, candidate.word))
+      );
+      nextWords[index] = available[0] ?? wordObj;
       return nextWords;
     });
 
@@ -303,10 +517,10 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
     
     setBossTarget(bt => bt === completedWord ? null : bt);
     setBossTyped(bt => bt === completedWord ? "" : bt);
-  }, [bossHealth, playerHealth, setBossHealth, setPlayerHealth, currentWordPool]);
+  }, [bossHealth, playerHealth, setBossHealth, setPlayerHealth, recordCombatEvent, currentWordPool, playDamage, triggerImpact, showReaction, chooseRandom, DIALOGUES, playSuccess, runStats.currentCombo]);
 
   useEffect(() => {
-    if (phase !== "combat" || bossHealth <= 0 || playerHealth <= 0) return;
+    if (phase !== "combat" || combatFrozen || bossHealth <= 0 || playerHealth <= 0) return;
 
     if (playerTarget && playerTyped === playerTarget) {
       const timer = setTimeout(() => handleWordComplete(playerTarget, 'player'), 0);
@@ -315,23 +529,138 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
       const timer = setTimeout(() => handleWordComplete(bossTarget, 'boss'), 0);
       return () => clearTimeout(timer);
     }
-  }, [playerTyped, bossTyped, playerTarget, bossTarget, handleWordComplete, phase, bossHealth, playerHealth]);
+  }, [playerTyped, bossTyped, playerTarget, bossTarget, handleWordComplete, phase, combatFrozen, bossHealth, playerHealth]);
+
+  const accuracy = runStats.totalKeystrokes > 0
+    ? Math.round((runStats.correctKeystrokes / runStats.totalKeystrokes) * 100)
+    : 100;
+  const wpm = runStats.combatSeconds > 0
+    ? Math.round((runStats.correctKeystrokes / 5) / (runStats.combatSeconds / 60))
+    : 0;
+  const activeMoralChoices = moralThreshold === null ? [] : MORAL_CHOICES[moralThreshold];
+  const moralDescriptions: Record<MoralCommand, string> = language === 'tr' ? {
+    REROUTE_TO_CATALYST: 'Kardeşi güçlendir; bir şehir sektörünü karanlığa göm.',
+    EVACUATE_SECTOR: '75.000 sivili tahliye et; boss savunmasını yenilesin.',
+    DRAIN_LIFE_SUPPORT: 'Boss canının %22’sini sil; yaşam desteğini kapat.',
+    ABORT_EXTRACTION: 'Şebekeyi toparla; kardeşin stabilitesini feda et.',
+  } : {
+    REROUTE_TO_CATALYST: 'Strengthen your sibling; condemn a city sector to darkness.',
+    EVACUATE_SECTOR: 'Evacuate 75,000 civilians; let the boss restore its defenses.',
+    DRAIN_LIFE_SUPPORT: 'Erase 22% boss health; shut down life support.',
+    ABORT_EXTRACTION: "Stabilize the grid; sacrifice your sibling's stability.",
+  };
 
   return (
-    <div className={`w-full h-full border border-green-900 rounded p-4 relative overflow-hidden flex flex-col items-center justify-center ${empActive ? 'bg-white shadow-[0_0_100px_rgba(255,255,255,1)] transition-all duration-75' : 'bg-black shadow-[0_0_20px_rgba(0,255,0,0.1)] transition-all duration-1000'}`}>
+    <div className={`w-full h-full border border-green-900 rounded p-4 relative overflow-hidden flex flex-col items-center justify-center ${impactShake ? 'animate-[shake_0.12s_ease-in-out_3]' : ''} ${empActive ? 'bg-white shadow-[0_0_100px_rgba(255,255,255,1)] transition-all duration-75' : 'bg-black shadow-[0_0_20px_rgba(0,255,0,0.1)] transition-all duration-1000'}`}>
       <div className="absolute inset-0 pointer-events-none bg-size-[100%_4px] bg-[linear-gradient(rgba(0,255,0,0.05)_1px,transparent_1px)] opacity-20"></div>
 
+      {phase === 'combat' && (
+        <div className="absolute top-3 left-3 z-20 flex gap-3 text-[10px] sm:text-xs font-mono text-cyan-500">
+          <span>WPM {wpm}</span>
+          <span>ACC {accuracy}%</span>
+          <span className={runStats.currentCombo >= 5 ? 'text-yellow-400 animate-pulse' : 'text-gray-500'}>COMBO x{runStats.currentCombo}</span>
+        </div>
+      )}
+
+      {mechanicMessage && (
+        <p className="absolute top-10 left-1/2 -translate-x-1/2 z-20 text-xs text-red-400 bg-black/90 border border-red-900 px-3 py-1 animate-pulse">
+          {mechanicMessage}
+        </p>
+      )}
+
+      {screenSplit && (
+        <div className="absolute inset-0 z-10 pointer-events-none" aria-hidden="true">
+          <div className="absolute left-0 top-0 h-full w-1/2 translate-x-2 border-r-2 border-red-700 bg-red-950/10" />
+          <div className="absolute right-0 top-0 h-full w-1/2 -translate-x-2 border-l-2 border-cyan-700 bg-cyan-950/10" />
+        </div>
+      )}
+
+      {moralThreshold !== null && !isPaused && (
+        <div className="absolute inset-0 z-40 bg-black/95 flex flex-col items-center justify-center p-5" role="dialog" aria-modal="true" aria-labelledby="moral-decision-title">
+          <p className="text-xs text-red-500 tracking-[0.35em] mb-2">{language === 'tr' ? 'GERİ ALINAMAZ KOMUT' : 'IRREVERSIBLE COMMAND'}</p>
+          <h3 id="moral-decision-title" className="text-xl sm:text-2xl text-white font-bold mb-2 text-center">
+            {language === 'tr' ? `BOSS %${moralThreshold} — KİMİ KURTARACAKSIN?` : `BOSS ${moralThreshold}% — WHO WILL YOU SAVE?`}
+          </h3>
+          <p className="text-xs text-gray-500 mb-5">{language === 'tr' ? 'Seçtiğin komutu klavyeyle yaz.' : 'Type the command you choose.'}</p>
+          <div className="grid gap-3 w-full max-w-xl">
+            {activeMoralChoices.map((choice) => {
+              const isCandidate = choice.startsWith(moralTyped);
+              return (
+                <div key={choice} className={`border p-3 ${isCandidate ? 'border-cyan-700 bg-cyan-950/20' : 'border-gray-900 opacity-35'}`}>
+                  <p className="font-bold tracking-wider text-sm sm:text-base">
+                    {choice.split('').map((char, index) => (
+                      <span key={`${choice}-${index}`} className={isCandidate && index < moralTyped.length ? 'text-green-400' : 'text-gray-400'}>{char}</span>
+                    ))}
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1">{moralDescriptions[choice]}</p>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-5 w-full max-w-xl border-t border-purple-900 pt-2 text-purple-400">
+            &gt; {moralTyped}<span className="inline-block w-2 h-4 bg-purple-400 ml-1 animate-pulse align-middle" />
+          </div>
+        </div>
+      )}
+
+      {phase === 'combat' && bossHealth > 0 && playerHealth > 0 && (
+        <button
+          type="button"
+          onClick={() => setIsPaused((paused) => !paused)}
+          className="absolute top-3 right-3 z-50 border border-gray-700 px-2 py-1 text-xs text-gray-400 hover:border-cyan-600 hover:text-cyan-400"
+        >
+          [F2] {isPaused ? (language === 'tr' ? 'DEVAM' : 'RESUME') : (language === 'tr' ? 'DURAKLAT' : 'PAUSE')}
+        </button>
+      )}
+
+      {isPaused && (
+        <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center" role="dialog" aria-modal="true" aria-label={language === 'tr' ? 'Oyun duraklatıldı' : 'Game paused'}>
+          <p className="text-cyan-400 text-2xl font-bold tracking-widest mb-4">
+            {language === 'tr' ? 'SİSTEM DURAKLATILDI' : 'SYSTEM PAUSED'}
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsPaused(false)}
+            className="border border-cyan-600 px-5 py-2 text-cyan-400 hover:bg-cyan-950"
+          >
+            &gt; {language === 'tr' ? 'DEVAM ET' : 'RESUME'}
+          </button>
+        </div>
+      )}
+
       {/* KARDEŞ YARDIM ÇAĞRISI (GLITCH) */}
-      {siblingPlea && (
+      {reactionMessage && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="absolute top-[27%] left-1/2 -translate-x-1/2 z-30 bg-black/90 px-4 py-3 w-[88%] max-w-xl text-center border border-purple-800 pointer-events-none"
+        >
+          <p className="text-[10px] text-purple-500 tracking-widest mb-2">[{language === 'tr' ? 'KARDEŞ // CANLI SİNYAL' : 'SIBLING // LIVE SIGNAL'}]</p>
+          <p className="text-purple-300 font-mono text-sm sm:text-base leading-snug">“{reactionMessage}”</p>
+        </motion.div>
+      )}
+
+      {siblingPlea && !reactionMessage && (
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 bg-black/80 p-4 rounded-lg border border-red-700"
+          className="absolute top-[27%] left-1/2 -translate-x-1/2 z-20 bg-black/85 px-4 py-3 rounded-lg border border-red-700 pointer-events-none"
         >
           <p className="text-red-500 font-mono text-2xl animate-pulse drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]">
             &gt; {siblingPlea}
           </p>
+        </motion.div>
+      )}
+
+      {radioMessage && (
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="absolute bottom-14 left-4 z-30 max-w-[75%] border-l-2 border-yellow-700 bg-black/90 px-3 py-2"
+        >
+          <p className="text-[10px] text-yellow-600 tracking-wider">[{radioMessage.speaker}]</p>
+          <p className="text-xs text-yellow-200 mt-1">“{radioMessage.text}”</p>
         </motion.div>
       )}
 
@@ -370,14 +699,15 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
             </div>
           )}
           
-          {activeWords.map((wordObj, i) => {
+          {activeWords.map((wordObj) => {
             const isPlayerTarget = playerTarget === wordObj.word;
+            const isPlayerCandidate = !playerTarget && playerTyped.length > 0 && wordObj.word.startsWith(playerTyped);
             const isBossTarget = bossTarget === wordObj.word;
             const isTrap = wordObj.type === 'trap';
             const isEncrypted = wordObj.type === 'encrypted';
 
             return (
-              <div key={i} className={`flex flex-col items-center relative w-full group ${currentBoss === 'FINAL_BOSS' || isTrap ? 'animate-[shake_0.5s_ease-in-out_infinite]' : ''}`}>
+              <div key={wordObj.word} className={`flex flex-col items-center relative w-full group ${currentBoss === 'FINAL_BOSS' || isTrap ? 'animate-[shake_0.5s_ease-in-out_infinite]' : ''}`}>
                 <div className="text-red-500 mb-1 flex drop-shadow-[0_0_5px_rgba(239,68,68,0.8)] h-6 justify-center w-full transition-all">
                   {wordObj.word.split('').map((char, idx) => (
                     <span key={`boss-${idx}`} className={isBossTarget && idx < bossTyped.length ? 'opacity-100' : 'opacity-0'}>{char}</span>
@@ -387,10 +717,11 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
                 <div className={`text-gray-600 font-bold relative z-10 flex justify-center w-full items-center gap-3 ${isTrap ? 'text-red-900 line-through' : isEncrypted ? 'text-purple-700' : ''}`}>
                   {isTrap && <span className="text-red-500 text-xs animate-pulse">[TRAP]</span>}
                   {isEncrypted && <span className="text-purple-400 text-xs animate-pulse">[ENCRYPTED]</span>}
+                  {antivirusNoise && currentBoss === 'ANTIVIRUS' && <span className="text-red-700 text-xs animate-pulse">#@</span>}
                   
                   <span className="flex transition-colors duration-300">
                     {wordObj.word.split('').map((char, idx) => {
-                      const isTyped = isPlayerTarget && idx < playerTyped.length;
+                      const isTyped = (isPlayerTarget || isPlayerCandidate) && idx < playerTyped.length;
                       let charColor = isTyped ? 'opacity-0' : 'opacity-50';
                       if (isTrap) charColor = isTyped ? 'opacity-0' : 'text-red-500 opacity-80';
                       if (isEncrypted) charColor = isTyped ? 'opacity-0' : 'text-purple-400 opacity-80';
@@ -400,6 +731,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
                       );
                     })}
                   </span>
+                  {antivirusNoise && currentBoss === 'ANTIVIRUS' && <span className="text-red-700 text-xs animate-pulse">%!</span>}
                   <span className={isTrap ? "text-red-600 text-sm tracking-normal" : "text-yellow-600 text-sm tracking-normal"}>
                     {isTrap ? `[-${wordObj.damage} HP]` : `[-${wordObj.damage}]`}
                   </span>
@@ -407,7 +739,7 @@ export function FightBox({ currentBoss, bossHealth, setBossHealth, playerHealth,
 
                 <div className={`mt-1 flex h-6 justify-center w-full absolute top-7 ${isTrap ? 'text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]' : isEncrypted ? 'text-purple-400 drop-shadow-[0_0_5px_rgba(192,132,252,0.8)]' : 'text-green-400 drop-shadow-[0_0_5px_rgba(74,222,128,0.8)]'}`}>
                   {wordObj.word.split('').map((char, idx) => (
-                    <span key={`player-${idx}`} className={isPlayerTarget && idx < playerTyped.length ? 'opacity-100' : 'opacity-0'}>{char}</span>
+                    <span key={`player-${idx}`} className={(isPlayerTarget || isPlayerCandidate) && idx < playerTyped.length ? 'opacity-100' : 'opacity-0'}>{char}</span>
                   ))}
                 </div>
               </div>

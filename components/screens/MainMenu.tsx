@@ -48,7 +48,7 @@ const MatrixRain = () => {
 export function MainMenu() {
   const language = useGameStore((state: GameState) => state.language);
   const setLanguage = useGameStore((state: GameState) => state.setLanguage);
-  const setGameStatus = useGameStore((state: GameState) => state.setGameStatus);
+  const startGame = useGameStore((state: GameState) => state.startGame);
 
   // Dil desteğine göre oyun rehberi metinleri
   const instructionsTr = {
@@ -58,7 +58,8 @@ export function MainMenu() {
       "🟢 YEŞİL KELİMELER: Normal saldırı. Klavyenle yazarak yok edebilirsin.",
       "🔴 [TRAP] KIRMIZI KELİMELER: Tuzaktır! Yazarsan sen hasar alırsın. Görmezden gel.",
       "🟣 [ENCRYPTED] MOR KELİMELER: Önce 'DECRYPT' yazarak kalkanı kır, sonra asıl kelimeyi yaz.",
-      "⚡ [SPACE] OVERLOAD EMP: Canından 200 feda edip düşmana 300 vurur ve ekranı temizler (Savaş başına 1 kez)."
+      "⚡ [SPACE] OVERLOAD EMP: Canından 200 feda edip düşmana 300 vurur ve ekranı temizler (Savaş başına 1 kez).",
+      "⏸ [F2] DURAKLAT: Savaşı duraklatır veya devam ettirir."
     ]
   };
   const instructionsEn = {
@@ -68,7 +69,8 @@ export function MainMenu() {
       "🟢 GREEN WORDS: Normal attack. Type them with your keyboard to destroy them.",
       "🔴 [TRAP] RED WORDS: It's a trap! If you type it, you take damage. Ignore them.",
       "🟣 [ENCRYPTED] PURPLE WORDS: Type 'DECRYPT' to break the shield, then type the revealed word.",
-      "⚡ [SPACE] OVERLOAD EMP: Sacrifices 200 HP to deal 300 damage and clear the screen (Once per fight)."
+      "⚡ [SPACE] OVERLOAD EMP: Sacrifices 200 HP to deal 300 damage and clear the screen (Once per fight).",
+      "⏸ [F2] PAUSE: Pauses or resumes combat."
     ]
   };
   const inst = language === 'tr' ? instructionsTr : instructionsEn;
@@ -98,7 +100,7 @@ export function MainMenu() {
         <button onClick={() => setLanguage('tr')} className={`px-6 py-2 border transition-colors ${language === 'tr' ? 'bg-cyan-900 border-cyan-500 text-white' : 'border-gray-700 text-gray-500 hover:border-gray-400'}`}>TÜRKÇE</button>
         <button onClick={() => setLanguage('en')} className={`px-6 py-2 border transition-colors ${language === 'en' ? 'bg-cyan-900 border-cyan-500 text-white' : 'border-gray-700 text-gray-500 hover:border-gray-400'}`}>ENGLISH</button>
       </div>
-      <button onClick={() => setGameStatus('INTRO')} className="px-8 py-3 bg-red-900 text-white font-bold tracking-widest hover:bg-red-700 transition-colors border border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)] z-10">
+      <button onClick={startGame} className="px-8 py-3 bg-red-900 text-white font-bold tracking-widest hover:bg-red-700 transition-colors border border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)] z-10">
         {language === 'tr' ? 'SİSTEME BAĞLAN' : 'CONNECT TO SYSTEM'}
       </button>
     </div>

@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Null Breaker
 
-## Getting Started
+Null Breaker, kardeşini Aetheria'nın enerji çekirdeğinden kurtarmaya çalışan bir sistem sızıcısını konu alan terminal tabanlı cyberpunk aksiyon oyunudur. Oyuncunun her saldırısı kardeşini özgürlüğe yaklaştırırken şehrin bütünlüğünü ve sivillerin hayatını tehlikeye atar.
 
-First, run the development server:
+## Oynanış
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Ekrandaki sistem komutlarını boss'tan önce yaz.
+- Kırmızı `[TRAP]` kelimelerden kaçın.
+- Mor `[ENCRYPTED]` düğümleri çözerek gerçek saldırıyı açığa çıkar.
+- `Space` ile savaş başına bir kez EMP kullan; 200 HP ve şehir bütünlüğü karşılığında 300 hasar ver.
+- `F2` ile savaşı duraklat, `Escape` ile mevcut kelime hedefini temizle.
+- Finalde Aetheria ve kardeşin için üç farklı sonuçtan birini seç.
+
+## Dinamik sistemler
+
+- Boss canı `%70`, `%40` ve `%15` seviyelerinde savaş durur; iki ahlaki komuttan birini yazarak seçersin.
+- Kararlar kardeşin stabilitesini, şehir bütünlüğünü, sivil kayıpları ve boss canını doğrudan değiştirir.
+- Kardeş; combo, EMP, tuzaklar ve alınan hasara göre canlı tepki verir. İsimli siviller kararların ardından telsizden konuşur.
+- WPM, doğruluk ve combo takip edilir; her beşli combo kardeşi ek olarak stabilize eder.
+- Firewall hedefleri temizler, Antivirus sahte karakter üretir, Core AI kelimeleri tersine çevirir, Final Boss arayüzü parçalar.
+- Web Audio tabanlı kalp atışı ve ambient ses karar anlarında tamamen susar; hasar ve EMP ekran/ses geri bildirimi üretir.
+- Final ekranı karar geçmişini, kayıp/kurtarılan sivilleri, WPM, doğruluk ve maksimum combo değerini özetler.
+
+## Kurulum
+
+Gereksinimler: Node.js 20 veya üzeri ve npm.
+
+```powershell
+npm.cmd install
+npm.cmd run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+PowerShell yürütme politikası `npm.ps1` dosyasını engelliyorsa politika ayarını değiştirmek yerine `npm.cmd` kullanabilirsin. Oyun geliştirme sunucusunda `http://localhost:3000` adresinde açılır.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Komutlar
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```powershell
+npm.cmd run dev        # Geliştirme sunucusu
+npm.cmd run lint       # ESLint
+npm.cmd run typecheck  # TypeScript kontrolü
+npm.cmd run build      # Production build
+npm.cmd run start      # Production sunucusu
+```
 
-## Learn More
+## Teknoloji
 
-To learn more about Next.js, take a look at the following resources:
+- Next.js 16 App Router
+- React 19 ve TypeScript
+- Tailwind CSS 4
+- Zustand 5
+- Framer Motion 12
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Proje yapısı
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```text
+app/                    Next.js route ve global stiller
+components/screens/     Menü, intro, oyun ve combat ekranları
+game/constants/         Boss, kelime ve diyalog verileri
+store/                  Merkezi oyun state machine
+types/                  Oyun domain tipleri
+```
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Hikâye ve tasarım kapsamı için [ProjectScope.md](./ProjectScope.md), yapılan çalışmalar için [Proggress.md](./Proggress.md) dosyasına bakabilirsin.

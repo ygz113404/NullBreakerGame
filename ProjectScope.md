@@ -13,7 +13,7 @@ Null Breaker, arayüz tabanlı bir hacker-aksiyon oyunudur. Oyunun temel felsefe
 ---
 
 ## 🛠 Teknik Mimari (Tech Stack)
-* **Framework:** Next.js 14+ (App Router)
+* **Framework:** Next.js 16 (App Router)
 * **Dil:** TypeScript
 * **Styling:** Tailwind CSS (Dark/Cyberpunk Theme)
 * **Animasyon:** Framer Motion (UI geçişleri ve mermi efektleri)
@@ -56,12 +56,9 @@ Ekran `3 Sütunlu Grid` yapısı üzerine kuruludur:
 ## 📂 Dosya Yapısı (Folder Structure)
 
 ```text
-src/
-├── components/
-│   ├── layout/          # LeftPanel, RightPanel, MainConsole
-│   ├── game/            # FightBox, WordNode
-│   └── ui/              # TerminalText, StatCard, ProgressBar
-├── store/               # useGameStore.ts (Zustand: Şehir ve Kardeş state'leri)
-├── hooks/               # useTyping.ts, useBossAI.ts
-├── constants/           # bossData.ts (Diyaloglar ve mermi paternleri)
-└── types/               # game.d.ts (GameStates, BossTypes)
+app/                     # Next.js route, metadata ve global stiller
+components/screens/      # Menü, intro, ana oyun ve terminal combat
+game/constants/          # Boss ayarları, kelime havuzları ve diyaloglar
+store/                   # Zustand merkezi oyun state machine
+types/                   # GameScene, boss, final ve veri tipleri
+```

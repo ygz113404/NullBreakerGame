@@ -31,6 +31,124 @@ export const getDialogues = (language: Language) => ({
     "Giderek daha da karanlık oluyor...",
     "Unutma beni..."
   ],
+  sibling_reactions: {
+    emp: language === "en" ? [
+      "That surge went through me too... Please, warn me next time.",
+      "I felt thousands of voices disappear for a second.",
+      "My heart stopped matching the machine for a moment.",
+      "The whole city screamed through the cable.",
+      "You burned part of yourself to reach me. Don't do that again.",
+      "I can still taste the metal from that pulse.",
+    ] : [
+      "O dalga benim içimden de geçti... Bir dahakine beni uyar.",
+      "Bir anlığına binlerce sesin sustuğunu hissettim.",
+      "Kalbim bir anlığına makinenin ritminden koptu.",
+      "Bütün şehir kablonun içinden çığlık attı.",
+      "Bana ulaşmak için kendinden bir parça yaktın. Bir daha yapma.",
+      "O darbenin metal tadı hâlâ ağzımda.",
+    ],
+    trap: language === "en" ? [
+      "That's not my voice, brother. Don't trust everything you see.",
+      "They are using my memories against you.",
+      "That command was wearing my face.",
+      "Wait... I never said those words to you.",
+      "The system learned what makes you hesitate.",
+      "Look past the red signal. I'm still here.",
+    ] : [
+      "O benim sesim değil abi. Gördüğün her şeye güvenme.",
+      "Anılarımı sana karşı kullanıyorlar.",
+      "O komut benim yüzümü takmıştı.",
+      "Bekle... Ben sana o sözleri hiç söylemedim.",
+      "Sistem seni neyin duraksattığını öğrenmiş.",
+      "Kırmızı sinyalin arkasına bak. Ben hâlâ buradayım.",
+    ],
+    bossHit: language === "en" ? [
+      "Your signal is breaking. Stay with me.",
+      "I can't lose you again.",
+      "Brother? Answer me. Just press one key.",
+      "Your pulse vanished from the network for a second.",
+      "Don't let this machine make me an only child.",
+      "I can feel your pain arriving before your voice.",
+      "You promised you would come back for me.",
+      "Slow down. Breathe. I need you alive, not fast.",
+    ] : [
+      "Sinyalin parçalanıyor. Benimle kal.",
+      "Seni bir daha kaybedemem.",
+      "Abi? Cevap ver. Tek bir tuşa bas yeter.",
+      "Nabzın bir saniyeliğine ağdan kayboldu.",
+      "Bu makinenin beni tek çocuk bırakmasına izin verme.",
+      "Acını, sesinden önce hissediyorum.",
+      "Benim için geri döneceğine söz vermiştin.",
+      "Yavaşla. Nefes al. Hızlı olmana değil, yaşamana ihtiyacım var.",
+    ],
+    combo: language === "en" ? [
+      "I remember that rhythm... You used to type like that beside me.",
+      "Your signal is calming my heart. Keep going.",
+      "There you are. That's the brother I remember.",
+      "Each clean command pulls me closer to you.",
+      "For the first time, the machine sounds quieter than you.",
+      "Don't break the rhythm. I'm following it home.",
+    ] : [
+      "O ritmi hatırlıyorum... Yanımda da böyle yazardın.",
+      "Sinyalin kalbimi sakinleştiriyor. Devam et.",
+      "İşte buradasın. Hatırladığım abim bu.",
+      "Her temiz komut beni sana biraz daha yaklaştırıyor.",
+      "İlk kez makinenin sesi seninkinden daha kısık.",
+      "Ritmi bozma. Onu takip ederek eve dönüyorum.",
+    ],
+    moral: {
+      REROUTE_TO_CATALYST: language === "en" ? [
+        "More power... but whose lights did you turn off for me?",
+        "I feel stronger. Somewhere above us, someone just felt the dark.",
+        "You keep giving me pieces of their city. How many pieces are left?",
+      ] : [
+        "Daha fazla güç... ama benim için kimin ışıklarını söndürdün?",
+        "Daha güçlüyüm. Yukarıda birileri az önce karanlığı hissetti.",
+        "Bana şehirlerinden parçalar veriyorsun. Geriye kaç parça kaldı?",
+      ],
+      EVACUATE_SECTOR: language === "en" ? [
+        "You slowed down for them. Maybe you are still the brother I remember.",
+        "I heard the transports leave. Thank you for not making me their grave.",
+        "Save them first. I have survived this long.",
+      ] : [
+        "Onlar için yavaşladın. Belki hâlâ hatırladığım abimsin.",
+        "Taşıma araçlarının ayrıldığını duydum. Beni onların mezarı yapmadığın için sağ ol.",
+        "Önce onları kurtar. Ben buraya kadar dayandım.",
+      ],
+      DRAIN_LIFE_SUPPORT: language === "en" ? [
+        "No... I can feel their last breaths inside the grid.",
+        "The network became quieter. Too quiet.",
+        "Tell me there was another way. Lie if you have to.",
+      ] : [
+        "Hayır... Son nefeslerini şebekenin içinde hissediyorum.",
+        "Şebeke sessizleşti. Olmaması gerektiği kadar sessiz.",
+        "Başka bir yol olduğunu söyle. Gerekirse yalan söyle.",
+      ],
+      ABORT_EXTRACTION: language === "en" ? [
+        "You chose them over me... I understand. I wish it didn't hurt.",
+        "The pain is back, but the city is breathing again.",
+        "Don't apologize. Just don't forget why you stopped.",
+      ] : [
+        "Onları bana tercih ettin... Anlıyorum. Keşke bu kadar acıtmasaydı.",
+        "Acı geri döndü ama şehir yeniden nefes alıyor.",
+        "Özür dileme. Sadece neden durduğunu unutma.",
+      ],
+    },
+  },
+  civilian_radio: {
+    SECTOR_DARK: language === "en"
+      ? { speaker: "NEHIR // SECTOR-6", text: "The lights are gone. Arda, hold my hand. Rescue will find us... right?" }
+      : { speaker: "NEHİR // SEKTÖR-6", text: "Işıklar söndü. Arda, elimi tut. Kurtarma ekibi bizi bulur... değil mi?" },
+    SECTOR_EVACUATED: language === "en"
+      ? { speaker: "DENIZ // RESCUE-2", text: "Last transport is clear. Seventy-five thousand souls are moving to the lower deck." }
+      : { speaker: "DENİZ // KURTARMA-2", text: "Son taşıma aracı da çıktı. Yetmiş beş bin kişi alt güverteye ilerliyor." },
+    LIFE_SUPPORT_DRAINED: language === "en"
+      ? { speaker: "DR. LENA // CLINIC-4", text: "Ventilators are stopping one by one. Whoever is listening: remember their names." }
+      : { speaker: "DR. LENA // KLİNİK-4", text: "Solunum cihazları birer birer duruyor. Beni duyan varsa: isimlerini unutmayın." },
+    EXTRACTION_ABORTED: language === "en"
+      ? { speaker: "MIRA // GRID CONTROL", text: "The collapse has slowed. We don't know who gave us this time, but we will use it." }
+      : { speaker: "MİRA // ŞEBEKE KONTROL", text: "Çöküş yavaşladı. Bize bu zamanı kimin verdiğini bilmiyoruz ama kullanacağız." },
+  },
   pre_firewall_logs: [
     { speaker: language === "en" ? "SYSTEM" : "SİSTEM", text: language === "en" ? "Monitoring external network. Civilian communication frequencies accessed." : "Dış ağ dinleniyor. Sivil haberleşme frekanslarına girildi." },
     { speaker: language === "en" ? "CITIZEN_A" : "VATANDAŞ_A", text: language === "en" ? "The weather sensors are working perfectly today. Living in Aetheria is such a blessing." : "Bugün hava sensörleri mükemmel çalışıyor. Aetheria'da yaşamak ne büyük bir lütuf." },

@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useGameStore } from '../../store/useGameStore';
 import { GameState } from '../../types/game';
-import { getDialogues } from '../../game/constants/dialogues'; // <-- YENİ
+import { getDialogues } from '../../game/constants/dialogues';
 
 export function IntroScreen() {
   const language = useGameStore((state: GameState) => state.language);
-  const setGameStatus = useGameStore((state: GameState) => state.setGameStatus);
+  const completeIntro = useGameStore((state: GameState) => state.completeIntro);
   const [dialogueIndex, setDialogueIndex] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
 
@@ -19,7 +19,6 @@ export function IntroScreen() {
 
     const currentLine = introDialogues[dialogueIndex];
     let charIndex = 0;
-    setDisplayedText('');
 
     const typingInterval = setInterval(() => {
       if (charIndex <= currentLine.text.length) {
@@ -35,9 +34,10 @@ export function IntroScreen() {
 
   const handleNext = () => {
     if (dialogueIndex < introDialogues.length - 1) {
+      setDisplayedText('');
       setDialogueIndex(prev => prev + 1);
     } else {
-      setGameStatus('IDLE');
+      completeIntro();
     }
   };
 
